@@ -286,7 +286,7 @@ func startListener(deps *Deps, key string, doneCh chan bool) chan *Spec {
 func main() {
 	deps := &Deps{
 		Docker: NewDocker(endpoint("DOCKER")),
-		Consul: NewConsul(endpoint("CONSUL"), endpoint("CONSUL_AGENT"))}
+		Consul: NewConsul(endpoint("CONSUL_AGENT"))}
 
 	consulKey := os.Args[1]
 	fmt.Printf("Running docker image described in %v\n", consulKey)

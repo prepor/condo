@@ -12,7 +12,6 @@ import (
 )
 
 type Consul struct {
-	Endpoint      string
 	AgentEndpoint string
 	HTTPClient    *http.Client
 }
@@ -71,9 +70,8 @@ type Spec struct {
 	ModifyIndex uint
 }
 
-func NewConsul(consulEndpoint string, consulAgentEndpoint string) *Consul {
+func NewConsul(consulAgentEndpoint string) *Consul {
 	return &Consul{
-		Endpoint:      consulEndpoint,
 		AgentEndpoint: consulAgentEndpoint,
 		HTTPClient:    http.DefaultClient,
 	}
@@ -164,7 +162,7 @@ func (consul *Consul) DeregisterService(idSuffix string, service *ServiceSpec) e
 }
 
 func (consul *Consul) ReceiveSpec(consulKey string, index uint) (*Spec, error) {
-	url := consul.Endpoint + "/v1/kv" + consulKey
+	url := consul.AgentEndpoint + "/v1/kv" + consulKey
 	if index > 0 {
 		url += fmt.Sprintf("?wait=10s&index=%d", index)
 	}
