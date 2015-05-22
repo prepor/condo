@@ -1,0 +1,28 @@
+{
+    "Image": {
+        "Name": "docker2.dev.flocktory.com:5000/flocktory-flock-widget-docker2",
+        "Tag": "a1ea148cc4412d836d5fe4b5d78cf6c59f98b5a0"
+    },
+    "Services": [{
+        "Name": "widget",
+        "Check": {
+            "Script": "curl http://localhost:8351",
+            "Interval": "10s",
+            "Timeout": 120
+        },
+        "Port": 8350,
+        "Tags": ["test"]
+    }, {
+        "Name": "widget-http",
+        "Check": {
+            "Script": "curl http://localhost:8351",
+            "Interval": "10s",
+            "Timeout": 120
+        },
+        "Port": 8351,
+        "Tags": ["test"]
+    }],
+    "Envs": [{"Name": "FLOCKTORY_ENVIRONMENT_PATH",
+              "Value": "config/production.clj"}],
+    "StopAfterTimeout": 10
+}
