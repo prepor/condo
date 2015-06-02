@@ -136,29 +136,29 @@ func (docker *Docker) InspectImage(name string, tag string) (*Image, error) {
 	return &image, nil
 }
 
+type dockerPort struct {
+	HostPort string
+}
+
+type hostConfig struct {
+	Binds        []string
+	PortBindings map[string][]dockerPort
+	Privileged   bool
+}
+
 type createContainerCmd struct {
 	Host       string
 	User       string
-	Privileged bool
 	Image      string
 	Cmd        []string
 	Env        []string
 	Volumes    map[string]map[string]string
+	HostConfig hostConfig
 }
 
 type createContainerResp struct {
 	Id       string
 	Warnings []string
-}
-
-type dockerPort struct {
-	HostIp   string
-	HostPort string
-}
-
-type startContainerCmd struct {
-	Binds        []string
-	PortBindings map[string][]dockerPort
 }
 
 func (docker *Docker) deleteContainer(container *Container) error {
@@ -230,15 +230,34 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 	for _, v := range spec.Volumes {
 		volumes[v.To] = make(map[string]string)
 	}
-	cmd := &createContainerCmd{
-		Host:       spec.Host,
-		User:       spec.User,
-		Privileged: spec.Privileged,
-		Image:      spec.Image.Id,
-		Cmd:        spec.Cmd,
-		Env:        envs,
-		Volumes:    volumes,
+
+	binds := make([]string, len(spec.Volumes))
+	for i, v := range spec.Volumes {
+		binds[i] = fmt.Sprintf("%s:%s", v.From, v.To)
 	}
+
+	portBindings := make(map[string][]dockerPort, len(spec.Services))
+	for _, s := range spec.Services {
+		var hostPort string
+		if s.HostPort != 0 {
+			hostPort = strconv.Itoa(int(s.HostPort))
+		}
+		portBindings[fmt.Sprintf("%d/tcp", s.Port)] = []dockerPort{dockerPort{HostPort: hostPort}}
+	}
+	cmd := &createContainerCmd{
+		Host:    spec.Host,
+		User:    spec.User,
+		Image:   spec.Image.Id,
+		Cmd:     spec.Cmd,
+		Env:     envs,
+		Volumes: volumes,
+		HostConfig: hostConfig{
+			Binds:        binds,
+			PortBindings: portBindings,
+			Privileged:   spec.Privileged,
+		},
+	}
+	fmt.Printf("Container spec: %+v", cmd)
 	body, err := json.Marshal(cmd)
 	if err != nil {
 		return nil, err
@@ -264,29 +283,7 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 	url = docker.Endpoint + fmt.Sprintf("/containers/%s/start", container.Id)
 	fmt.Println("Start docker container", url)
 
-	binds := make([]string, len(spec.Volumes))
-	for i, v := range spec.Volumes {
-		binds[i] = fmt.Sprintf("%s:%s", v.From, v.To)
-	}
-
-	portBindings := make(map[string][]dockerPort, len(spec.Services))
-	for _, s := range spec.Services {
-		var hostPort string
-		if s.HostPort != 0 {
-			hostPort = string(s.HostPort)
-		}
-		portBindings[fmt.Sprintf("%d/tcp", s.Port)] = []dockerPort{dockerPort{HostIp: "", HostPort: hostPort}}
-	}
-
-	startCmd := &startContainerCmd{
-		Binds:        binds,
-		PortBindings: portBindings,
-	}
-	body, err = json.Marshal(startCmd)
-	if err != nil {
-		return nil, err
-	}
-	req, err = http.NewRequest("POST", url, bytes.NewBuffer(body))
+	req, err = http.NewRequest("POST", url, nil)
 	if err != nil {
 		return nil, err
 	}
