@@ -216,7 +216,13 @@ func (docker *Docker) setPortsMapping(container *Container) error {
 	}
 
 	for _, s := range container.Spec.Services {
-		p, err := strconv.ParseUint(resp.NetworkSettings.Ports[fmt.Sprintf("%d/tcp", s.Port)][0].HostPort, 10, 0)
+		var protocol string
+		if s.Udp {
+			protocol = "udp"
+		} else {
+			protocol = "tcp"
+		}
+		p, err := strconv.ParseUint(resp.NetworkSettings.Ports[fmt.Sprintf("%d/%s", s.Port, protocol)][0].HostPort, 10, 0)
 		if err != nil {
 			return err
 		}
@@ -251,7 +257,13 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 		if s.HostPort != 0 {
 			hostPort = strconv.Itoa(int(s.HostPort))
 		}
-		portBindings[fmt.Sprintf("%d/tcp", s.Port)] = []dockerPort{dockerPort{HostPort: hostPort}}
+		var protocol string
+		if s.Udp {
+			protocol = "udp"
+		} else {
+			protocol = "tcp"
+		}
+		portBindings[fmt.Sprintf("%d/%s", s.Port, protocol)] = []dockerPort{dockerPort{HostPort: hostPort}}
 	}
 	cmd := &createContainerCmd{
 		Host:    spec.Host,

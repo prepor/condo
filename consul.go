@@ -43,6 +43,7 @@ type ServiceSpec struct {
 	Check    *CheckSpec `json:",omitempty"`
 	Port     uint
 	HostPort uint
+	Udp      bool
 	Tags     []string
 }
 
