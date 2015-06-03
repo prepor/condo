@@ -48,8 +48,14 @@ func (docker *Docker) StopContainer(container *Container) error {
 	}
 
 	if code == 500 {
-		return errors.New(fmt.Sprintf("Container stopping: bad http-status %s; %s %+v", code, res, container))
+		return errors.New(fmt.Sprintf("Container stopping: bad http-status %d; %s %+v", code, res, container))
 	}
+
+	err = docker.deleteContainer(container)
+	if err != nil {
+		return err
+	}
+
 	fmt.Println("Docker container stopped", url)
 
 	return nil
@@ -174,7 +180,7 @@ func (docker *Docker) deleteContainer(container *Container) error {
 	}
 
 	if code == 500 {
-		return errors.New(fmt.Sprintf("Container deleting: bad http-status %s; %s %+v", code, res, container))
+		return errors.New(fmt.Sprintf("Container deleting: bad http-status %d; %s %+v", code, res, container))
 	}
 	fmt.Println("Docker container deleted", url)
 
