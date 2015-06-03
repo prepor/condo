@@ -54,6 +54,10 @@ type DiscoverySpec struct {
 	Env      string
 }
 
+type LogsSpec struct {
+	Type string
+}
+
 type Spec struct {
 	Image            ImageSpec
 	Services         []ServiceSpec
@@ -68,6 +72,7 @@ type Spec struct {
 	StopBefore       bool
 	StopAfterTimeout uint
 	KillTimeout      uint
+	Logs             *LogsSpec
 
 	ModifyIndex uint
 }

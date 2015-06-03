@@ -146,10 +146,15 @@ type dockerPort struct {
 	HostPort string
 }
 
+type logConfig struct {
+	Type string
+}
+
 type hostConfig struct {
 	Binds        []string
 	PortBindings map[string][]dockerPort
 	Privileged   bool
+	LogConfig    logConfig
 }
 
 type createContainerCmd struct {
@@ -265,6 +270,13 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 		}
 		portBindings[fmt.Sprintf("%d/%s", s.Port, protocol)] = []dockerPort{dockerPort{HostPort: hostPort}}
 	}
+
+	logs := logConfig{}
+	if spec.Logs != nil {
+		logs.Type = spec.Logs.Type
+	} else {
+		logs.Type = "syslog"
+	}
 	cmd := &createContainerCmd{
 		Host:    spec.Host,
 		User:    spec.User,
@@ -276,6 +288,7 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 			Binds:        binds,
 			PortBindings: portBindings,
 			Privileged:   spec.Privileged,
+			LogConfig:    logs,
 		},
 	}
 	fmt.Printf("Container spec: %+v", cmd)
