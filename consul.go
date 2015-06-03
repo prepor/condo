@@ -60,6 +60,7 @@ type Spec struct {
 	Cmd              []string
 	Envs             []EnvSpec
 	Discoveries      []DiscoverySpec
+	Name             string
 	Host             string
 	User             string
 	Privileged       bool

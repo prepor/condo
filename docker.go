@@ -221,6 +221,9 @@ func (docker *Docker) setPortsMapping(container *Container) error {
 
 func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 	url := docker.Endpoint + "/containers/create"
+	if spec.Name != "" {
+		url = fmt.Sprintf("%s?name=%s", url, spec.Name)
+	}
 	fmt.Printf("Create docker container (image %s):%s\n", spec.Image.Id, url)
 	envs := make([]string, len(spec.Envs))
 	for i, e := range spec.Envs {
