@@ -58,7 +58,6 @@ func deregisterServices(consul *Consul, container *Container) error {
 }
 
 func deploySpec(deps *Deps, currentContainer *Container, newSpec *Spec) (*Container, error) {
-	fmt.Println("----DEPLOY SPEC!11")
 	var err error
 	if newSpec.StopBefore && currentContainer != nil {
 		err = deregisterServices(deps.Consul, currentContainer)

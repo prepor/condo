@@ -336,7 +336,6 @@ func (consul *Consul) ServiceDiscovery(service string, tag string, passing bool,
 
 			select {
 			case <-done:
-				fmt.Println("----DISC DONE")
 				close(out)
 				return
 			default:
@@ -366,7 +365,7 @@ func (consul *Consul) WaitHealth(serviceId string, service *ServiceSpec) error {
 			} else if check.Status == "passing" {
 				return nil
 			} else {
-				time.Sleep(time.Millisecond * 100)
+				time.Sleep(time.Millisecond * 1000)
 			}
 		}
 	}
