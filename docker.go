@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -236,9 +237,31 @@ func (docker *Docker) setPortsMapping(container *Container) error {
 	return nil
 }
 
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func randSeq(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
+}
+
+func (docker *Docker) renameExistsContainer(name string) {
+	url := docker.Endpoint + fmt.Sprintf("/containers/%s/rename?name=%s", name, fmt.Sprintf("%s_%s", name, randSeq(10)))
+	fmt.Println("Rename docker container", url)
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return
+	}
+
+	dockerRequest(docker, req)
+}
+
 func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 	url := docker.Endpoint + "/containers/create"
 	if spec.Name != "" {
+		docker.renameExistsContainer(spec.Name)
 		url = fmt.Sprintf("%s?name=%s", url, spec.Name)
 	}
 	fmt.Printf("Create docker container (image %s):%s\n", spec.Image.Id, url)
