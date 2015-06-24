@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"text/template"
 	"time"
 )
 
@@ -107,16 +108,35 @@ type registerServiceCmd struct {
 	Check *registerServiceCmdCheck `json:",omitempty"`
 }
 
-func checkerScript(id string, script string) string {
-	// docker exec doesn't proxy exit code now. so this is the workaround.
-	// should be fixed in next docker release https://github.com/docker/docker/pull/9208
-	return fmt.Sprintf("docker exec %s %s", id, script)
+type checkerEnv struct {
+	ID   string
+	Port uint
+}
+
+func checkerScript(env *checkerEnv, script string) (string, error) {
+	// docker exec leaks now https://github.com/docker/docker/issues/12899
+	// return fmt.Sprintf("docker exec %s %s", id, script)
+	tmpl, err := template.New("checker script").Parse(script)
+	if err != nil {
+		return "", err
+	}
+	result := new(bytes.Buffer)
+	err = tmpl.Execute(result, env)
+	if err != nil {
+		return "", err
+	}
+	return result.String(), nil
 }
 
 func (consul *Consul) RegisterService(serviceId string, service *ServiceSpec, port uint) error {
 	url := consul.AgentEndpoint + "/v1/agent/service/register"
 
 	fmt.Println("Register service", url, service)
+	checker, err := checkerScript(&checkerEnv{ID: serviceId, Port: port}, service.Check.Script)
+
+	if err != nil {
+		return err
+	}
 
 	body, err := json.Marshal(&registerServiceCmd{
 		ID:   service.Name + "_" + serviceId,
@@ -124,7 +144,7 @@ func (consul *Consul) RegisterService(serviceId string, service *ServiceSpec, po
 		Tags: service.Tags,
 		Port: port,
 		Check: &registerServiceCmdCheck{
-			Script:   checkerScript(serviceId, service.Check.Script),
+			Script:   checker,
 			Interval: service.Check.Interval}})
 
 	if err != nil {
