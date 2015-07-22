@@ -155,6 +155,7 @@ type hostConfig struct {
 	Binds        []string
 	PortBindings map[string][]dockerPort
 	Privileged   bool
+	NetworkMode  string
 	LogConfig    logConfig
 }
 
@@ -228,11 +229,15 @@ func (docker *Docker) setPortsMapping(container *Container) error {
 		} else {
 			protocol = "tcp"
 		}
-		p, err := strconv.ParseUint(resp.NetworkSettings.Ports[fmt.Sprintf("%d/%s", s.Port, protocol)][0].HostPort, 10, 0)
-		if err != nil {
-			return err
+		if container.Spec.NetworkMode == "host" {
+			container.PortsMapping[s.Port] = s.Port
+		} else {
+			p, err := strconv.ParseUint(resp.NetworkSettings.Ports[fmt.Sprintf("%d/%s", s.Port, protocol)][0].HostPort, 10, 0)
+			if err != nil {
+				return err
+			}
+			container.PortsMapping[s.Port] = uint(p)
 		}
-		container.PortsMapping[s.Port] = uint(p)
 	}
 	return nil
 }
@@ -311,6 +316,7 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 			Binds:        binds,
 			PortBindings: portBindings,
 			Privileged:   spec.Privileged,
+			NetworkMode:  spec.NetworkMode,
 			LogConfig:    logs,
 		},
 	}

@@ -68,6 +68,7 @@ type Spec struct {
 	Discoveries      []DiscoverySpec
 	Name             string
 	Host             string
+	NetworkMode      string
 	User             string
 	Privileged       bool
 	StopBefore       bool
