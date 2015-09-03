@@ -148,7 +148,8 @@ type dockerPort struct {
 }
 
 type logConfig struct {
-	Type string
+	Type   string
+	Config map[string]string
 }
 
 type hostConfig struct {
@@ -302,6 +303,7 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 	logs := logConfig{}
 	if spec.Logs != nil {
 		logs.Type = spec.Logs.Type
+		logs.Config = spec.Logs.Config
 	} else {
 		logs.Type = "syslog"
 	}

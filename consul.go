@@ -56,7 +56,8 @@ type DiscoverySpec struct {
 }
 
 type LogsSpec struct {
-	Type string
+	Type   string
+	Config map[string]string
 }
 
 type Spec struct {
