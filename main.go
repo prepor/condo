@@ -1,4 +1,4 @@
-// cons project cons.go
+// condo project condo.go
 package main
 
 import (
