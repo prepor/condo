@@ -77,8 +77,7 @@ type Spec struct {
 	StopAfterTimeout uint
 	KillTimeout      uint
 	Logs             *LogsSpec
-
-	ModifyIndex uint
+	ModifyIndex      uint
 }
 
 func NewConsul(consulAgentEndpoint string) *Consul {
@@ -134,7 +133,7 @@ func checkerScript(env *checkerEnv, script string) (string, error) {
 func (consul *Consul) RegisterService(serviceId string, service *ServiceSpec, port uint) error {
 	url := consul.AgentEndpoint + "/v1/agent/service/register"
 
-	fmt.Println("Register service", url, service)
+	fmt.Printf("Consul service %s register: %s\n", service.Name, url)
 	checker, err := checkerScript(&checkerEnv{ID: serviceId, Port: port}, service.Check.Script)
 
 	if err != nil {
@@ -167,13 +166,14 @@ func (consul *Consul) RegisterService(serviceId string, service *ServiceSpec, po
 		return errors.New(fmt.Sprintf("service registering: bad http-status %s; %s", resp.StatusCode, v))
 	}
 	defer resp.Body.Close()
+	fmt.Printf("Consul service %s(%s) registered\n", service.Name, serviceId)
 	return nil
 }
 
 func (consul *Consul) DeregisterService(idSuffix string, service *ServiceSpec) error {
 	url := consul.AgentEndpoint + fmt.Sprintf("/v1/agent/service/deregister/%s", service.Name+"_"+idSuffix)
 
-	fmt.Println("Deregister service", url, service)
+	fmt.Printf("Consul service %s(%s) deregister: %s\n", service.Name, idSuffix, url)
 
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
@@ -188,6 +188,7 @@ func (consul *Consul) DeregisterService(idSuffix string, service *ServiceSpec) e
 		return errors.New(fmt.Sprintf("service registering: bad http-status %s; %s", resp.StatusCode, v))
 	}
 	defer resp.Body.Close()
+	fmt.Printf("Consul service %s(%s) deregistered!\n", service.Name, idSuffix)
 	return nil
 }
 
@@ -196,7 +197,6 @@ func (consul *Consul) ReceiveSpec(consulKey string, index uint) (*Spec, error) {
 	if index > 0 {
 		url += fmt.Sprintf("?wait=10s&index=%d", index)
 	}
-	fmt.Printf("Make request: %s\n", url)
 	resp, err := consul.HTTPClient.Get(url)
 	if err != nil {
 		return nil, err
@@ -212,7 +212,6 @@ func (consul *Consul) ReceiveSpec(consulKey string, index uint) (*Spec, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Body: %s\n", body)
 	err = json.Unmarshal(body, &keys)
 	if err != nil {
 		return nil, err
@@ -225,7 +224,6 @@ func (consul *Consul) ReceiveSpec(consulKey string, index uint) (*Spec, error) {
 		return nil, err
 	}
 	spec.ModifyIndex = key.ModifyIndex
-	// fmt.Printf("Received spec: %+v\n", spec)
 	return &spec, nil
 }
 
@@ -234,7 +232,7 @@ func (consul *Consul) ReceiveSpecCh(consulKey string, index uint) chan *Spec {
 	go func() {
 		v, err := consul.ReceiveSpec(consulKey, index)
 		if err != nil {
-			fmt.Printf("Error while funcToCh: %s", err)
+			fmt.Printf("Error in ReceiveSpecCh: %s\n", err)
 		} else {
 			ch <- v
 		}
@@ -257,7 +255,6 @@ type checksResp map[string]*CheckResp
 func (consul *Consul) ReceiveCheck(id string) (*CheckResp, error) {
 	// is this should be Catalog request?
 	url := consul.AgentEndpoint + "/v1/agent/checks"
-	fmt.Printf("Consul request: %s\n", url)
 	resp, err := consul.HTTPClient.Get(url)
 	if err != nil {
 		return nil, err
@@ -272,7 +269,6 @@ func (consul *Consul) ReceiveCheck(id string) (*CheckResp, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Body: %s\n", body)
 	var checks checksResp
 	err = json.Unmarshal(body, &checks)
 	if err != nil {
@@ -280,7 +276,7 @@ func (consul *Consul) ReceiveCheck(id string) (*CheckResp, error) {
 	}
 	check := checks[id]
 	if check == nil {
-		return nil, errors.New(fmt.Sprintf("Undefined check: %s %+v\n", id, checks))
+		return nil, errors.New(fmt.Sprintf("Undefined check: %s %s\n", id, body))
 	} else {
 		return check, nil
 	}
@@ -312,7 +308,7 @@ func serviceDiscoveryTick(consul *Consul, url string, index string) ([]*Discover
 	if index != "" {
 		url += "&wait=30s&index=" + index
 	}
-	fmt.Printf("Consul request: %s\n", url)
+	fmt.Printf("Consul discovering services: %s\n", url)
 	resp, err := consul.HTTPClient.Get(url)
 	if err != nil {
 		return nil, "", err
@@ -327,7 +323,6 @@ func serviceDiscoveryTick(consul *Consul, url string, index string) ([]*Discover
 	if err != nil {
 		return nil, "", err
 	}
-	fmt.Printf("Body: %s\n", body)
 	var discovered serviceDiscoveryResp
 	err = json.Unmarshal(body, &discovered)
 	if err != nil {
@@ -341,7 +336,7 @@ func serviceDiscoveryTick(consul *Consul, url string, index string) ([]*Discover
 			Port:    v.Service.Port,
 		}
 	}
-
+	fmt.Printf("Consul discovered services: %s\n", string(body))
 	return res, resp.Header["X-Consul-Index"][0], nil
 }
 
@@ -368,7 +363,7 @@ func (consul *Consul) ServiceDiscovery(service string, tag string, passing bool,
 				return
 			default:
 				if err != nil {
-					fmt.Println("Service discovery error", err)
+					fmt.Println("Service discovery error: ", err)
 					time.Sleep(time.Millisecond * 100)
 				} else if !reflect.DeepEqual(lastDiscovered, v) {
 					out <- v
