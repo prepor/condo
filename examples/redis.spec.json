@@ -1,0 +1,36 @@
+{
+    "Image": {
+        "Name": "docker.hub.example.com:5000/my-redis",
+        "Tag": "0.1"
+    },
+    "Name": "redis",
+    // Run container with network mode = host, container will use host interaces.
+    // see http://www.dasblinkenlichten.com/docker-networking-101-host-mode/ .
+    "NetworkMode": "host",
+    "Services": [
+        {
+            "Port": 6379,
+            "Name": "redis",
+            "Check": {
+                "Script": "nc -w1 -z localhost {{.Port}}",
+                "Interval": "10s",
+                "Timeout": 200000
+            },
+            "HostPort": 6379,
+            "Tags": [
+                "test"
+            ]
+        }
+    ],
+    // Defines Docker volumes
+    // See https://docs.docker.com/userguide/dockervolumes/
+    "Volumes": [
+        {
+            // Path inside docker container ("Destination" in Docker docs).
+            "To": "/data",
+            // Path on host machine to be mapped ("Source" in Docker docs).
+            "From": "/mnt/redis"
+        }
+    ],
+    "StopBefore": true
+}
