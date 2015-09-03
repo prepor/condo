@@ -1,7 +1,8 @@
-// cons project cons.go
+// condo project condo.go
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -39,7 +40,7 @@ func waitServices(consul *Consul, container *Container) error {
 	for _, s := range container.Spec.Services {
 		err := consul.WaitHealth(container.Id, &s)
 		if err != nil {
-			fmt.Println("Error while service waiting:", err)
+			fmt.Printf("Error while waiting for service %s: %s\n", &s.Name, err)
 			return err
 		}
 	}
@@ -50,7 +51,7 @@ func deregisterServices(consul *Consul, container *Container) error {
 	for _, s := range container.Spec.Services {
 		err := consul.DeregisterService(container.Id, &s)
 		if err != nil {
-			fmt.Println("Error while service degistering:", err)
+			fmt.Printf("Can't deregister service %s: %s\n", &s.Name, err)
 			return err
 		}
 	}
@@ -77,7 +78,7 @@ func deploySpec(deps *Deps, currentContainer *Container, newSpec *Spec) (*Contai
 	haltContainer := func() {
 		err2 := deps.Docker.StopContainer(newContainer)
 		if err2 != nil {
-			fmt.Printf("Can't stop container: %s (%+v)", err2, newContainer)
+			fmt.Printf("Can't stop container: %s (%s)", err2, newContainer.Id)
 		}
 	}
 	err = registerServices(deps.Consul, newContainer)
@@ -88,7 +89,7 @@ func deploySpec(deps *Deps, currentContainer *Container, newSpec *Spec) (*Contai
 	haltServices := func(container *Container) {
 		err = deregisterServices(deps.Consul, container)
 		if err != nil {
-			fmt.Printf("Can't deregister container: %s (%+v)", err, currentContainer)
+			fmt.Printf("Can't deregister container: %s (%s)\n", err, currentContainer.Id)
 		}
 	}
 	err = waitServices(deps.Consul, newContainer)
@@ -102,7 +103,7 @@ func deploySpec(deps *Deps, currentContainer *Container, newSpec *Spec) (*Contai
 		time.Sleep(time.Duration(newSpec.StopAfterTimeout) * time.Second)
 		err = deps.Docker.StopContainer(currentContainer)
 		if err != nil {
-			fmt.Printf("Can't stop container: %s (%+v)", err, currentContainer)
+			fmt.Printf("Can't stop container: %s (%s)\n", err, currentContainer.Id)
 		}
 	}
 	return newContainer, nil
@@ -117,12 +118,12 @@ func deployerLoop(deps *Deps, input chan *Spec, exit chan bool) {
 			if currentContainer != nil {
 				err = deps.Docker.StopContainer(currentContainer)
 				if err != nil {
-					fmt.Printf("Can't stop container: %s (%+v)", err, currentContainer)
+					fmt.Printf("Can't stop container: %s (%s)\n", err, currentContainer.Id)
 				}
 
 				err = deregisterServices(deps.Consul, currentContainer)
 				if err != nil {
-					fmt.Printf("Can't deregister container: %s (%+v)", err, currentContainer)
+					fmt.Printf("Can't deregister container: %s (%s)\n", err, currentContainer.Id)
 				}
 			}
 			close(exit)
@@ -131,7 +132,7 @@ func deployerLoop(deps *Deps, input chan *Spec, exit chan bool) {
 			var newContainer *Container
 			newContainer, err = deploySpec(deps, currentContainer, newSpec)
 			if err != nil {
-				fmt.Printf("Error while deploying spec: %s\n", err)
+				fmt.Println("Error while deploying spec:", err)
 				t := time.NewTimer(time.Second * 5)
 				select {
 				case newSpec = <-input:
@@ -172,11 +173,9 @@ func watchForSpecServices(consul *Consul, specForWatch *Spec, out chan *Spec, do
 	discoveries := specForWatch.Discoveries
 	for true {
 		chosen, value, ok := reflect.Select(cases)
-		fmt.Println("----WATCH", ok)
 		if ok {
 			discovered := discoveries[chosen]
 			value2 := value.Interface().([]*DiscoveredService)
-			fmt.Println("----VALUE2", value2, len(value2))
 			var envValue string
 			if len(value2) == 0 {
 				continue
@@ -205,7 +204,6 @@ func watchForSpecServices(consul *Consul, specForWatch *Spec, out chan *Spec, do
 				updatedSpec.Envs = append(updatedSpec.Envs, env)
 			}
 			receivedDiscoveries[discovered] = true
-			fmt.Println("----WAIT", envValue, len(receivedDiscoveries), len(specForWatch.Discoveries))
 			if len(receivedDiscoveries) >= len(specForWatch.Discoveries) {
 				select {
 				case <-done:
@@ -228,10 +226,8 @@ func startServiceDiscovery(deps *Deps, input chan *Spec) chan *Spec {
 		var currentWatcher chan bool
 		for true {
 			newSpec := <-input
-			fmt.Println("-----NEW SPEC", newSpec)
 			if newSpec == nil {
 				if currentWatcher != nil {
-					fmt.Println("-----CLOSE1")
 					close(currentWatcher)
 				}
 				close(out)
@@ -257,7 +253,9 @@ func listenerLoop(deps *Deps, key string, out chan *Spec, doneCh chan bool) {
 		select {
 		case newSpec := <-newSpecCh:
 			if newSpec != nil && lastIndex != newSpec.ModifyIndex {
-				fmt.Printf("New spec %+v\n", newSpec)
+				// Should not get error here, ignore
+				specJson, _ := json.Marshal(newSpec)
+				fmt.Printf("New spec received: %s\n", specJson)
 				select {
 				case out <- newSpec:
 				default:
@@ -273,7 +271,6 @@ func listenerLoop(deps *Deps, key string, out chan *Spec, doneCh chan bool) {
 			return
 		}
 	}
-
 }
 
 func startListener(deps *Deps, key string, doneCh chan bool) chan *Spec {
@@ -288,7 +285,7 @@ func main() {
 		Consul: NewConsul(endpoint("CONSUL_AGENT"))}
 
 	consulKey := os.Args[1]
-	fmt.Printf("Running docker image described in %v\n", consulKey)
+	fmt.Println("Running docker image described in", consulKey)
 
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)

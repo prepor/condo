@@ -38,7 +38,7 @@ func detectContainer(docker *Docker, endpoint string) *Container {
 
 func (docker *Docker) StopContainer(container *Container) error {
 	url := docker.Endpoint + fmt.Sprintf("/containers/%s/stop?t=%d", container.Id, container.Spec.KillTimeout)
-	fmt.Println("Stop docker container", url)
+	fmt.Printf("Stop docker container %s: %s\n", container.Id, url)
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return err
@@ -57,7 +57,7 @@ func (docker *Docker) StopContainer(container *Container) error {
 		return err
 	}
 
-	fmt.Println("Docker container stopped", url)
+	fmt.Printf("Docker container %s stopped\n", container.Id)
 
 	return nil
 }
@@ -95,7 +95,7 @@ func checkStream(stream io.Reader) error {
 
 func (docker *Docker) pullImage(imageSpec *ImageSpec) error {
 	url := docker.Endpoint + "/images/create" + fmt.Sprintf("?fromImage=%s&tag=%s", imageSpec.Name, imageSpec.Tag)
-	fmt.Println("Pull docker image", url)
+	fmt.Printf("Docker image %s:%s pull: %s\n", imageSpec.Name, imageSpec.Tag, url)
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func (docker *Docker) pullImage(imageSpec *ImageSpec) error {
 	if err := checkStream(bytes.NewBuffer(res)); err != nil {
 		return err
 	}
-	fmt.Println("Docker image pulled", url)
+	fmt.Printf("Docker image %s:%s pulled\n", imageSpec.Name, imageSpec.Tag)
 
 	return nil
 }
@@ -123,7 +123,6 @@ func (docker *Docker) InspectImage(name string, tag string) (*Image, error) {
 		fullName += ":" + tag
 	}
 	url := docker.Endpoint + fmt.Sprintf("/images/%s/json", fullName)
-	fmt.Println("Inspect docker image", url)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -148,7 +147,8 @@ type dockerPort struct {
 }
 
 type logConfig struct {
-	Type string
+	Type   string
+	Config map[string]string
 }
 
 type hostConfig struct {
@@ -176,7 +176,7 @@ type createContainerResp struct {
 
 func (docker *Docker) deleteContainer(container *Container) error {
 	url := docker.Endpoint + fmt.Sprintf("/containers/%s", container.Id)
-	fmt.Println("Delete docker container", url)
+	fmt.Printf("Docker container %s delete: %s\n", container.Id, url)
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return err
@@ -189,7 +189,7 @@ func (docker *Docker) deleteContainer(container *Container) error {
 	if code == 500 {
 		return errors.New(fmt.Sprintf("Container deleting: bad http-status %d; %s %+v", code, res, container))
 	}
-	fmt.Println("Docker container deleted", url)
+	fmt.Printf("Docker container %s deleted\n", container.Id)
 
 	return nil
 }
@@ -204,7 +204,7 @@ type dockerInspectResp struct {
 
 func (docker *Docker) setPortsMapping(container *Container) error {
 	url := docker.Endpoint + fmt.Sprintf("/containers/%s/json", container.Id)
-	fmt.Println("Set container's ports mapping", url)
+	fmt.Printf("Docker container %s set ports mapping: %s\n", container.Id, url)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
@@ -218,7 +218,7 @@ func (docker *Docker) setPortsMapping(container *Container) error {
 	resp := &dockerInspectResp{}
 	err = json.Unmarshal(res, resp)
 	if err != nil {
-		fmt.Printf("Unmarshal error %s\n", res)
+		fmt.Println("Can't unmarhsal %s -- %s", res, err)
 		return err
 	}
 
@@ -253,13 +253,13 @@ func randSeq(n int) string {
 }
 
 func (docker *Docker) renameExistsContainer(name string) {
-	url := docker.Endpoint + fmt.Sprintf("/containers/%s/rename?name=%s", name, fmt.Sprintf("%s_%s", name, randSeq(10)))
-	fmt.Println("Rename docker container", url)
+	n := fmt.Sprintf("%s_%s", name, randSeq(10))
+	url := docker.Endpoint + fmt.Sprintf("/containers/%s/rename?name=%s", name, n)
+	fmt.Printf("Docker container %s rename to %s: %s\n", name, n, url)
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return
 	}
-
 	dockerRequest(docker, req)
 }
 
@@ -269,7 +269,7 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 		docker.renameExistsContainer(spec.Name)
 		url = fmt.Sprintf("%s?name=%s", url, spec.Name)
 	}
-	fmt.Printf("Create docker container (image %s):%s\n", spec.Image.Id, url)
+	fmt.Printf("Docker create container from %s: %s\n", spec.Image.Id, url)
 	envs := make([]string, len(spec.Envs))
 	for i, e := range spec.Envs {
 		envs[i] = fmt.Sprintf("%s=%s", e.Name, e.Value)
@@ -302,6 +302,7 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 	logs := logConfig{}
 	if spec.Logs != nil {
 		logs.Type = spec.Logs.Type
+		logs.Config = spec.Logs.Config
 	} else {
 		logs.Type = "syslog"
 	}
@@ -320,11 +321,11 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 			LogConfig:    logs,
 		},
 	}
-	fmt.Printf("Container spec: %+v", cmd)
 	body, err := json.Marshal(cmd)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("Docker create container from cmd: %s\n", string(body))
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
@@ -334,17 +335,18 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 	if err != nil {
 		return nil, err
 	} else if code != 201 {
-		return nil, errors.New(fmt.Sprintf("container creating: bad http-status %s; %s %+v", code, res, spec))
+		return nil, errors.New(fmt.Sprintf("Container create: bad http-status %s; %s %+v", code, res, spec))
 	}
 	resp := &createContainerResp{}
 	json.Unmarshal(res, resp)
 	if len(resp.Warnings) > 0 {
-		fmt.Println("Container creating: warnings: %s", resp.Warnings)
+		fmt.Println("Create container: warnings:", resp.Warnings)
 	}
 	container := &Container{Id: resp.Id, Spec: spec, PortsMapping: make(map[uint]uint)}
+	fmt.Printf("Docker container %s created\n", container.Id)
 
 	url = docker.Endpoint + fmt.Sprintf("/containers/%s/start", container.Id)
-	fmt.Println("Start docker container", url)
+	fmt.Printf("Docker container %s start: %s\n", container.Id, url)
 
 	req, err = http.NewRequest("POST", url, nil)
 	if err != nil {
@@ -357,14 +359,14 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 		return nil, err
 	} else if code == 500 {
 		docker.deleteContainer(container)
-		return nil, errors.New(fmt.Sprintf("Container starting: bad http-status %s; %s %+v", code, res, spec))
+		return nil, errors.New(fmt.Sprintf("Container start: bad http-status %s; %s %+v", code, res, spec))
 	}
 
 	err = docker.setPortsMapping(container)
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Printf("Docker container %s creeated and started!\n", container.Id)
 	return container, nil
 }
 
