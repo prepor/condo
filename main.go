@@ -20,7 +20,8 @@ type Deps struct {
 func endpoint(key string) string {
 	endpoint := os.Getenv(key)
 	if endpoint == "" {
-		panic(fmt.Sprintf("Don't know endpoint. Set %s environment key", key))
+		fmt.Fprintf(os.Stderr, "Don't know endpoint. Set %s environment key\n", key)
+		usageAndExit()
 	}
 	return endpoint
 }
@@ -279,14 +280,23 @@ func startListener(deps *Deps, key string, doneCh chan bool) chan *Spec {
 	return out
 }
 
+func usageAndExit() {
+	fmt.Fprintf(os.Stderr, "usage: DOCKER=$daddr CONSUL_AGENT=$caddr ./condo $conskey\n")
+	os.Exit(1)
+}
+
 func main() {
 	deps := &Deps{
 		Docker: NewDocker(endpoint("DOCKER")),
 		Consul: NewConsul(endpoint("CONSUL_AGENT"))}
 
+	if len(os.Args) < 2 {
+		fmt.Fprintf(os.Stderr, "Don't know consulkey. Pass consul key to watch as an argument")
+		usageAndExit()
+	}
 	consulKey := os.Args[1]
+	consulKey = strings.TrimPrefix(consulKey, "/")
 	fmt.Println("Running docker image described in", consulKey)
-
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
