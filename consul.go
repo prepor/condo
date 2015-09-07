@@ -193,7 +193,7 @@ func (consul *Consul) DeregisterService(idSuffix string, service *ServiceSpec) e
 }
 
 func (consul *Consul) ReceiveSpec(consulKey string, index uint) (*Spec, error) {
-	url := consul.AgentEndpoint + "/v1/kv" + consulKey
+	url := consul.AgentEndpoint + "/v1/kv/" + consulKey
 	if index > 0 {
 		url += fmt.Sprintf("?wait=10s&index=%d", index)
 	}
