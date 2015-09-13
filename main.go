@@ -287,7 +287,7 @@ func usageAndExit() {
 
 func main() {
 	deps := &Deps{
-		Docker: NewDocker(endpoint("DOCKER")),
+		Docker: NewDocker(endpoint("DOCKER"), os.Getenv("DOCKER_CERT_PATH")),
 		Consul: NewConsul(endpoint("CONSUL_AGENT"))}
 
 	if len(os.Args) < 2 {

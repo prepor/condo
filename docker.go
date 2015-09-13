@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -23,12 +26,50 @@ type Container struct {
 	Id           string
 	Spec         *Spec
 	PortsMapping map[uint]uint
+const (
+	defaultCaFile   = "ca.pem"
+	defaultKeyFile  = "key.pem"
+	defaultCertFile = "cert.pem"
+)
+
+func newHttpsClient(dockerCertPath string) *http.Client {
+	certFile := filepath.Join(dockerCertPath, defaultCertFile)
+	keyFile := filepath.Join(dockerCertPath, defaultKeyFile)
+	caFile := filepath.Join(dockerCertPath, defaultCaFile)
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Load CA cert
+	caCert, err := ioutil.ReadFile(caFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+	// Setup HTTPS client
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+	}
+	tlsConfig.BuildNameToCertificate()
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	return &http.Client{Transport: transport}
 }
 
-func NewDocker(docker_endpoint string) *Docker {
+func NewDocker(dockerEndpoint string, dockerCertPath string) *Docker {
+	if !(strings.HasPrefix(dockerEndpoint, "http://") ||
+		strings.HasPrefix(dockerEndpoint, "https://")) {
+		dockerEndpoint = "http://" + dockerEndpoint
+	}
+	if dockerCertPath != "" {
+		client = newHttpsClient(dockerCertPath)
+	} else {
+		client = http.DefaultClient
+	}
 	return &Docker{
-		Endpoint:   docker_endpoint,
-		HTTPClient: http.DefaultClient,
+		Endpoint:   dockerEndpoint,
+		HTTPClient: client,
 	}
 }
 
