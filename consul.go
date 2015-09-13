@@ -38,7 +38,7 @@ type EnvSpec struct {
 type CheckSpec struct {
 	Script   string
 	Interval string
-	Timeout  uint
+	Timeout  string
 }
 
 type ServiceSpec struct {
@@ -380,15 +380,19 @@ func (consul *Consul) ServiceDiscovery(service string, tag string, passing bool,
 }
 
 func (consul *Consul) WaitHealth(serviceId string, service *ServiceSpec) error {
-	timer := time.NewTimer(time.Millisecond * time.Duration(service.Check.Timeout))
+	duration, err := time.ParseDuration(service.Check.Timeout)
+	if err != nil {
+		return err
+	}
+	timer := time.NewTimer(duration)
 	for true {
 		select {
 		case <-timer.C:
 			return errors.New(fmt.Sprintf("WaitHealth timeout: %+v", service))
 		default:
-			check, err := consul.ReceiveCheck(fmt.Sprintf("service:%s_%s", service.Name, serviceId))
-			if err != nil {
-				return nil
+			check, err2 := consul.ReceiveCheck(fmt.Sprintf("service:%s_%s", service.Name, serviceId))
+			if err2 != nil {
+				return err2
 			} else if check.Status == "passing" {
 				return nil
 			} else {
