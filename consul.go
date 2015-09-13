@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"strings"
 	"text/template"
 	"time"
 )
@@ -81,6 +82,10 @@ type Spec struct {
 }
 
 func NewConsul(consulAgentEndpoint string) *Consul {
+	if !(strings.HasPrefix(consulAgentEndpoint, "http://") ||
+		strings.HasPrefix(consulAgentEndpoint, "https://")) {
+		consulAgentEndpoint = "http://" + consulAgentEndpoint
+	}
 	return &Consul{
 		AgentEndpoint: consulAgentEndpoint,
 		HTTPClient:    http.DefaultClient,
