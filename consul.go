@@ -111,8 +111,9 @@ type registerServiceCmd struct {
 }
 
 type checkerEnv struct {
-	ID   string
-	Port uint
+	ID         string
+	Port       uint
+	DockerHost string
 }
 
 func checkerScript(env *checkerEnv, script string) (string, error) {
@@ -130,16 +131,14 @@ func checkerScript(env *checkerEnv, script string) (string, error) {
 	return result.String(), nil
 }
 
-func (consul *Consul) RegisterService(serviceId string, service *ServiceSpec, port uint) error {
+func (consul *Consul) RegisterService(serviceId string, service *ServiceSpec, port uint, host string) error {
 	url := consul.AgentEndpoint + "/v1/agent/service/register"
 
 	fmt.Printf("Consul service %s register: %s\n", service.Name, url)
-	checker, err := checkerScript(&checkerEnv{ID: serviceId, Port: port}, service.Check.Script)
-
+	checker, err := checkerScript(&checkerEnv{ID: serviceId, Port: port, DockerHost: host}, service.Check.Script)
 	if err != nil {
 		return err
 	}
-
 	body, err := json.Marshal(&registerServiceCmd{
 		ID:   service.Name + "_" + serviceId,
 		Name: service.Name,

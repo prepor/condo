@@ -14,12 +14,16 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type Docker struct {
 	Endpoint   string
 	HTTPClient *http.Client
+	Host       string
 }
 
 type Container struct {
@@ -62,6 +66,12 @@ func NewDocker(dockerEndpoint string, dockerCertPath string) *Docker {
 		strings.HasPrefix(dockerEndpoint, "https://")) {
 		dockerEndpoint = "http://" + dockerEndpoint
 	}
+	url, err := url.Parse(dockerEndpoint)
+	if err != nil {
+		log.Fatal(err)
+	}
+	parts := strings.Split(url.Host, ":")
+	var client *http.Client
 	if dockerCertPath != "" {
 		client = newHttpsClient(dockerCertPath)
 	} else {
@@ -70,7 +80,9 @@ func NewDocker(dockerEndpoint string, dockerCertPath string) *Docker {
 	return &Docker{
 		Endpoint:   dockerEndpoint,
 		HTTPClient: client,
+		Host:       parts[0],
 	}
+
 }
 
 func detectContainer(docker *Docker, endpoint string) *Container {
