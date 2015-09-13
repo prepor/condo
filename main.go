@@ -41,7 +41,7 @@ func waitServices(consul *Consul, container *Container) error {
 	for _, s := range container.Spec.Services {
 		err := consul.WaitHealth(container.Id, &s)
 		if err != nil {
-			fmt.Printf("Error while waiting for service %s: %s\n", &s.Name, err)
+			fmt.Printf("Error while waiting for service %s: %s\n", s.Name, err)
 			return err
 		}
 	}
