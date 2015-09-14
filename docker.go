@@ -67,15 +67,17 @@ func newHttpsClient(dockerCertPath string) *http.Client {
 }
 
 func NewDocker(dockerEndpoint string, dockerCertPath string) *Docker {
-	if !(strings.HasPrefix(dockerEndpoint, "http://") ||
-		strings.HasPrefix(dockerEndpoint, "https://")) {
-		dockerEndpoint = "http://" + dockerEndpoint
-	}
+	dockerEndpoint = NormalizeEndpoint(dockerEndpoint, "http")
 	url, err := url.Parse(dockerEndpoint)
 	if err != nil {
 		log.Fatal(err)
 	}
-	parts := strings.Split(url.Host, ":")
+	var host string
+	if url.Host == "" { // Unix domain socket
+		host = "localhost"
+	} else {
+		host = strings.Split(url.Host, ":")[0]
+	}
 	var client *http.Client
 	if dockerCertPath != "" {
 		client = newHttpsClient(dockerCertPath)
@@ -85,7 +87,7 @@ func NewDocker(dockerEndpoint string, dockerCertPath string) *Docker {
 	return &Docker{
 		Endpoint:   dockerEndpoint,
 		HTTPClient: client,
-		Host:       parts[0],
+		Host:       host,
 	}
 
 }
