@@ -31,7 +31,8 @@ type Container struct {
 	Id           string
 	Spec         *Spec
 	PortsMapping map[uint]uint
-	StopWaiting  chan bool
+
+	Control chan bool
 }
 
 const (
@@ -90,7 +91,7 @@ func NewDocker(dockerEndpoint string, dockerCertPath string) *Docker {
 }
 
 func (docker *Docker) waitForContainer(container *Container) {
-	containerStopped := make(chan bool)
+	container.Control = make(chan bool)
 	// start goroutine with wait request
 	go func(out chan bool) {
 		url := docker.Endpoint + fmt.Sprintf("/containers/%s/wait", container.Id)
@@ -104,15 +105,15 @@ func (docker *Docker) waitForContainer(container *Container) {
 		// any response from here means container has been stopped
 		fmt.Printf("Container %s stopped with code %d, res: %s, error: %v\n", container.Id, code, res, err)
 		close(out)
-	}(containerStopped)
-	select {
-	case <-container.StopWaiting:
+	}(container.Control)
+	v := <-container.Control
+	if v {
 		// XXX: If we've got this message, the target container is
 		// about to stop, so we do not need to do anything about
 		// goroutine above, it will just finishes.
 		fmt.Printf("No longer waiting for container %s\n", container.Id)
 		return
-	case <-containerStopped:
+	} else {
 		fmt.Printf("Unexpected stop of container %s! Bailing out...\n", container.Id)
 		os.Exit(1)
 	}
@@ -120,7 +121,7 @@ func (docker *Docker) waitForContainer(container *Container) {
 
 func (docker *Docker) StopContainer(container *Container) error {
 	fmt.Printf("Stop waiting for container %s...\n", container.Id)
-	close(container.StopWaiting)
+	container.Control <- true
 	url := docker.Endpoint + fmt.Sprintf("/containers/%s/stop?t=%d", container.Id, container.Spec.KillTimeout)
 	fmt.Printf("Stop docker container %s: %s\n", container.Id, url)
 	req, err := http.NewRequest("POST", url, nil)
@@ -450,7 +451,6 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 	if err != nil {
 		return nil, err
 	}
-	container.StopWaiting = make(chan bool)
 	go docker.waitForContainer(container)
 	fmt.Printf("Docker container %s creeated and started!\n", container.Id)
 	return container, nil
