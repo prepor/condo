@@ -2,41 +2,128 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type Docker struct {
 	Endpoint   string
 	HTTPClient *http.Client
+	Host       string
 }
 
 type Container struct {
 	Id           string
 	Spec         *Spec
 	PortsMapping map[uint]uint
+
+	Control chan bool
 }
 
-func NewDocker(docker_endpoint string) *Docker {
+const (
+	defaultCaFile   = "ca.pem"
+	defaultKeyFile  = "key.pem"
+	defaultCertFile = "cert.pem"
+)
+
+func newHttpsClient(dockerCertPath string) *http.Client {
+	certFile := filepath.Join(dockerCertPath, defaultCertFile)
+	keyFile := filepath.Join(dockerCertPath, defaultKeyFile)
+	caFile := filepath.Join(dockerCertPath, defaultCaFile)
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Load CA cert
+	caCert, err := ioutil.ReadFile(caFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+	// Setup HTTPS client
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+	}
+	tlsConfig.BuildNameToCertificate()
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	return &http.Client{Transport: transport}
+}
+
+func NewDocker(dockerEndpoint string, dockerCertPath string) *Docker {
+	dockerEndpoint = NormalizeEndpoint(dockerEndpoint, "http")
+	url, err := url.Parse(dockerEndpoint)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var host string
+	if url.Host == "" { // Unix domain socket
+		host = "localhost"
+	} else {
+		host = strings.Split(url.Host, ":")[0]
+	}
+	var client *http.Client
+	if dockerCertPath != "" {
+		client = newHttpsClient(dockerCertPath)
+	} else {
+		client = http.DefaultClient
+	}
 	return &Docker{
-		Endpoint:   docker_endpoint,
-		HTTPClient: http.DefaultClient,
+		Endpoint:   dockerEndpoint,
+		HTTPClient: client,
+		Host:       host,
+	}
+
+}
+
+func (docker *Docker) waitForContainer(container *Container) {
+	container.Control = make(chan bool)
+	// start goroutine with wait request
+	go func(out chan bool) {
+		url := docker.Endpoint + fmt.Sprintf("/containers/%s/wait", container.Id)
+		fmt.Printf("Will wait for container %s: %s\n", container.Id, url)
+		req, err := http.NewRequest("POST", url, nil)
+		if err != nil {
+			fmt.Println("Error while trying to wait for container:", err)
+			return
+		}
+		res, code, err := dockerRequest(docker, req)
+		// any response from here means container has been stopped
+		fmt.Printf("Container %s stopped with code %d, res: %s, error: %v\n", container.Id, code, res, err)
+		close(out)
+	}(container.Control)
+	v := <-container.Control
+	if v {
+		// XXX: If we've got this message, the target container is
+		// about to stop, so we do not need to do anything about
+		// goroutine above, it will just finishes.
+		fmt.Printf("No longer waiting for container %s\n", container.Id)
+		return
+	} else {
+		fmt.Printf("Unexpected stop of container %s! Bailing out...\n", container.Id)
+		os.Exit(1)
 	}
 }
 
-func detectContainer(docker *Docker, endpoint string) *Container {
-	return nil
-}
-
 func (docker *Docker) StopContainer(container *Container) error {
+	fmt.Printf("Stop waiting for container %s...\n", container.Id)
+	container.Control <- true
 	url := docker.Endpoint + fmt.Sprintf("/containers/%s/stop?t=%d", container.Id, container.Spec.KillTimeout)
 	fmt.Printf("Stop docker container %s: %s\n", container.Id, url)
 	req, err := http.NewRequest("POST", url, nil)
@@ -366,6 +453,7 @@ func (docker *Docker) CreateContainer(spec *Spec) (*Container, error) {
 	if err != nil {
 		return nil, err
 	}
+	go docker.waitForContainer(container)
 	fmt.Printf("Docker container %s creeated and started!\n", container.Id)
 	return container, nil
 }

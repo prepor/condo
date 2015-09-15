@@ -26,9 +26,9 @@ func endpoint(key string) string {
 	return endpoint
 }
 
-func registerServices(consul *Consul, container *Container) error {
+func registerServices(consul *Consul, container *Container, docker *Docker) error {
 	for _, s := range container.Spec.Services {
-		err := consul.RegisterService(container.Id, &s, container.PortsMapping[s.Port])
+		err := consul.RegisterService(container.Id, &s, container.PortsMapping[s.Port], docker.Host)
 		if err != nil {
 			fmt.Println("Error while service registering:", err)
 			return err
@@ -41,7 +41,7 @@ func waitServices(consul *Consul, container *Container) error {
 	for _, s := range container.Spec.Services {
 		err := consul.WaitHealth(container.Id, &s)
 		if err != nil {
-			fmt.Printf("Error while waiting for service %s: %s\n", &s.Name, err)
+			fmt.Printf("Error while waiting for service %s: %s\n", s.Name, err)
 			return err
 		}
 	}
@@ -82,7 +82,7 @@ func deploySpec(deps *Deps, currentContainer *Container, newSpec *Spec) (*Contai
 			fmt.Printf("Can't stop container: %s (%s)", err2, newContainer.Id)
 		}
 	}
-	err = registerServices(deps.Consul, newContainer)
+	err = registerServices(deps.Consul, newContainer, deps.Docker)
 	if err != nil {
 		haltContainer()
 		return nil, err
@@ -287,7 +287,7 @@ func usageAndExit() {
 
 func main() {
 	deps := &Deps{
-		Docker: NewDocker(endpoint("DOCKER")),
+		Docker: NewDocker(endpoint("DOCKER"), os.Getenv("DOCKER_CERT_PATH")),
 		Consul: NewConsul(endpoint("CONSUL_AGENT"))}
 
 	if len(os.Args) < 2 {

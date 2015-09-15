@@ -37,7 +37,7 @@ type EnvSpec struct {
 type CheckSpec struct {
 	Script   string
 	Interval string
-	Timeout  uint
+	Timeout  string
 }
 
 type ServiceSpec struct {
@@ -81,6 +81,7 @@ type Spec struct {
 }
 
 func NewConsul(consulAgentEndpoint string) *Consul {
+	consulAgentEndpoint = NormalizeEndpoint(consulAgentEndpoint, "http")
 	return &Consul{
 		AgentEndpoint: consulAgentEndpoint,
 		HTTPClient:    http.DefaultClient,
@@ -111,8 +112,9 @@ type registerServiceCmd struct {
 }
 
 type checkerEnv struct {
-	ID   string
-	Port uint
+	ID         string
+	Port       uint
+	DockerHost string
 }
 
 func checkerScript(env *checkerEnv, script string) (string, error) {
@@ -130,16 +132,14 @@ func checkerScript(env *checkerEnv, script string) (string, error) {
 	return result.String(), nil
 }
 
-func (consul *Consul) RegisterService(serviceId string, service *ServiceSpec, port uint) error {
+func (consul *Consul) RegisterService(serviceId string, service *ServiceSpec, port uint, host string) error {
 	url := consul.AgentEndpoint + "/v1/agent/service/register"
 
 	fmt.Printf("Consul service %s register: %s\n", service.Name, url)
-	checker, err := checkerScript(&checkerEnv{ID: serviceId, Port: port}, service.Check.Script)
-
+	checker, err := checkerScript(&checkerEnv{ID: serviceId, Port: port, DockerHost: host}, service.Check.Script)
 	if err != nil {
 		return err
 	}
-
 	body, err := json.Marshal(&registerServiceCmd{
 		ID:   service.Name + "_" + serviceId,
 		Name: service.Name,
@@ -376,15 +376,19 @@ func (consul *Consul) ServiceDiscovery(service string, tag string, passing bool,
 }
 
 func (consul *Consul) WaitHealth(serviceId string, service *ServiceSpec) error {
-	timer := time.NewTimer(time.Millisecond * time.Duration(service.Check.Timeout))
+	duration, err := time.ParseDuration(service.Check.Timeout)
+	if err != nil {
+		return err
+	}
+	timer := time.NewTimer(duration)
 	for true {
 		select {
 		case <-timer.C:
 			return errors.New(fmt.Sprintf("WaitHealth timeout: %+v", service))
 		default:
-			check, err := consul.ReceiveCheck(fmt.Sprintf("service:%s_%s", service.Name, serviceId))
-			if err != nil {
-				return nil
+			check, err2 := consul.ReceiveCheck(fmt.Sprintf("service:%s_%s", service.Name, serviceId))
+			if err2 != nil {
+				return err2
 			} else if check.Status == "passing" {
 				return nil
 			} else {
