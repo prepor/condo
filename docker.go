@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ type Docker struct {
 	Endpoint   string
 	HTTPClient *http.Client
 	Host       string
+	Config     *DockerConfig
 }
 
 type Container struct {
@@ -33,6 +35,17 @@ type Container struct {
 	PortsMapping map[uint]uint
 
 	Control chan bool
+}
+
+type AuthConfig struct {
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	Auth     string `json:"auth,omitempty"`
+	Email    string `json:"email,omitempty"`
+}
+
+type DockerConfig struct {
+	Auths map[string]AuthConfig `json:"auths"`
 }
 
 const (
@@ -66,6 +79,43 @@ func newHttpsClient(dockerCertPath string) *http.Client {
 	return &http.Client{Transport: transport}
 }
 
+func expandHomeDir(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		dir := os.Getenv("HOME")
+		path = strings.TrimPrefix(path, "~/")
+		path = filepath.Join(dir, path)
+	}
+	return path
+}
+
+func loadJson(path string, value interface{}) error {
+	configFile, err := os.Open(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return json.NewDecoder(configFile).Decode(value)
+}
+
+func loadDockerConfig() *DockerConfig {
+	filename := expandHomeDir("~/.docker/config.json")
+	var dockerConfig DockerConfig
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		filename = expandHomeDir("~/.dockercfg")
+		if _, err := os.Stat(filename); os.IsNotExist(err) {
+			return nil
+		}
+	}
+	err := loadJson(filename, &dockerConfig)
+	if err != nil {
+		err2 := loadJson(filename, &dockerConfig.Auths)
+		if err2 != nil {
+			log.Fatal(err2)
+		}
+	}
+	fmt.Printf("Loaded docker config from %s: %+v\n", filename, dockerConfig)
+	return &dockerConfig
+}
+
 func NewDocker(dockerEndpoint string, dockerCertPath string) *Docker {
 	dockerEndpoint = NormalizeEndpoint(dockerEndpoint, "http")
 	url, err := url.Parse(dockerEndpoint)
@@ -84,12 +134,35 @@ func NewDocker(dockerEndpoint string, dockerCertPath string) *Docker {
 	} else {
 		client = http.DefaultClient
 	}
+
 	return &Docker{
 		Endpoint:   dockerEndpoint,
 		HTTPClient: client,
 		Host:       host,
+		Config:     loadDockerConfig(),
 	}
 
+}
+
+func (docker *Docker) setRegistryAuth(imageName string, request *http.Request) error {
+	if docker.Config != nil {
+		presumableRepoLabel := strings.Split(imageName, "/")[0]
+		for repoLabel, authConfig := range docker.Config.Auths {
+			if repoLabel == presumableRepoLabel {
+				buf, err := json.Marshal(authConfig)
+				if err != nil {
+					return err
+				}
+				registryAuthHeader := base64.URLEncoding.EncodeToString(buf)
+				request.Header.Set("X-Registry-Auth", registryAuthHeader)
+				fmt.Println(string(buf))
+				fmt.Printf("%+v\n", request)
+				fmt.Printf("Using X-Registry-Auth:%s to pull %s\n", registryAuthHeader, imageName)
+				return nil
+			}
+		}
+	}
+	return nil
 }
 
 func (docker *Docker) waitForContainer(container *Container) {
@@ -187,6 +260,7 @@ func (docker *Docker) pullImage(imageSpec *ImageSpec) error {
 	if err != nil {
 		return err
 	}
+	err = docker.setRegistryAuth(imageSpec.Name, req)
 	res, _, err := dockerRequest(docker, req)
 	if err != nil {
 		return err
