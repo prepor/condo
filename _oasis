@@ -1,0 +1,24 @@
+Name: condo
+Version: 0.1
+Synopsis: A library about consul and docker
+Authors: Me <me@myhost.com>
+License: LGPL with OCaml linking exception
+
+Description: Condo
+Homepage: http://github.com/prepor/condo
+OASISFormat: 0.4
+BuildTools: ocamlbuild
+Plugins: META (0.4), DevFiles (0.4)
+
+Library condo
+  Path: src
+  Modules: Spec, Consul
+  BuildDepends:
+    lwt,yojson,batteries,ppx_import,ppx_deriving.std,ppx_deriving_yojson,cohttp,lwt.unix,lwt.ppx,cohttp.lwt
+
+Executable condo
+  Path: src
+  MainIs: condo.ml
+  CompiledObject: best
+  BuildDepends: condo
+  
