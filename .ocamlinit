@@ -9,8 +9,14 @@ let root =
 in Sys.chdir root;;
 
 #use "topfind";;
-#require "batteries";;
-#require "lwt";;
+#require "core";;
+#require "async";;
 #require "cohttp";;
+#require "atdgen";;
 #require "yojson";;
+#require "ppx_deriving.std";;
+#require "ppx_deriving_yojson";;
 #directory "_build";;
+
+open Async.Std;;
+open Core.Std;;

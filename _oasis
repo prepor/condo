@@ -12,13 +12,14 @@ Plugins: META (0.4), DevFiles (0.4)
 
 Library condo
   Path: src
-  Modules: Spec, Consul
+  Modules: Consul
+  InternalModules: Spec, Docker, Utils
   BuildDepends:
-    lwt,yojson,batteries,ppx_import,ppx_deriving.std,ppx_deriving_yojson,cohttp,lwt.unix,lwt.ppx,cohttp.lwt
+    async,yojson,core,ppx_import,ppx_deriving.std,ppx_deriving_yojson,cohttp,cohttp.async,threads
 
 Executable condo
   Path: src
   MainIs: condo.ml
-  CompiledObject: best
   BuildDepends: condo
-  
+  CompiledObject: best
+

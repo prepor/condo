@@ -1,7 +1,6 @@
-PKG lwt yojson batteries ppx_import ppx_deriving.std ppx_deriving_yojson cohttp lwt.unix lwt.ppx
+PKG yojson core ppx_import ppx_deriving.std ppx_deriving_yojson async cohttp cohttp.async
 
 S src
 B _build/src
 
-CMT /Users/prepor/.opam/system/build/batteries.2.3.1/_build/src
 CMT /Users/prepor/.opam/system/build/yojson.1.2.3/
