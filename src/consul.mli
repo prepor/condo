@@ -15,7 +15,7 @@ val key : t -> string -> string Pipe.Reader.t * (unit -> unit Deferred.t)
 
 val discovery : t -> ?tag:string -> Service.name -> (string * int) list Pipe.Reader.t * (unit -> unit Deferred.t)
 
-val register_service : t -> ?id_suffix:string -> Spec.service -> (Service.id, exn) Result.t Deferred.t
+val register_service : t -> ?id_suffix:string -> Spec.Service.t -> int -> (Service.id, exn) Result.t Deferred.t
 
 val deregister_service : t -> Service.id -> (unit, exn) Result.t Deferred.t
 

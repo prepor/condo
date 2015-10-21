@@ -1,52 +1,66 @@
-type image = {
-  name : string;
-  tag : string [@default "latest"];
-} [@@deriving yojson, show]
+module Image = struct
+  type t = {
+    name : string;
+    tag : string [@default "latest"];
+  } [@@deriving yojson, show]
+end
 
-type env = {
-  name : string;
-  value : string;
-} [@@deriving yojson, show]
+module Env = struct
+  type t = {
+    name : string;
+    value : string;
+  } [@@deriving yojson, show]
+end
 
-type discovery = {
-  service : string;
-  tag : string option [@default None];
-  multiple : bool [@default false];
-  env : string;
-} [@@deriving yojson, show]
+module Discovery = struct
+  type t = {
+    service : string;
+    tag : string option [@default None];
+    multiple : bool [@default false];
+    env : string;
+  } [@@deriving yojson, show]
+end
 
-type volume = {
-  from : string [@key "From"];
-  to_ : string [@key "To"];
-} [@@deriving yojson, show]
+module Volume = struct
+  type t = {
+    from : string [@key "From"];
+    to_ : string [@key "To"];
+  } [@@deriving yojson, show]
+end
 
-type logs = {
-  log_type : string [@key "type"];
-  config : Yojson.Safe.json option [@key "Config"] [@default None] [@opaque];
-} [@@deriving yojson, show]
+module Logs = struct
+  type t = {
+    log_type : string [@key "type"];
+    config : Yojson.Safe.json option [@key "Config"] [@default None] [@opaque];
+  } [@@deriving yojson, show]
+end
 
-type check = {
-  script : string;
-  interval : int;
-  timeout : int;
-} [@@deriving yojson, show]
+module Check = struct
+  type t = {
+    script : string;
+    interval : int;
+    timeout : int;
+  } [@@deriving yojson, show]
+end
 
-type service = {
-  name : string;
-  check : check;
-  port : int;
-  tags : string list [@default []];
-  host_port : int option [@default None];
-  udp : bool [@default false]
-} [@@deriving yojson, show]
+module Service = struct
+  type t = {
+    name : string;
+    check : Check.t;
+    port : int;
+    tags : string list [@default []];
+    host_port : int option [@default None];
+    udp : bool [@default false]
+  } [@@deriving yojson, show]
+end
 
 type t = {
-  image : image;
-  discoveries : discovery list [@default []];
-  services : service list [@default []];
-  volumes : volume list [@default []];
+  image : Image.t;
+  discoveries : Discovery.t list [@default []];
+  services : Service.t list [@default []];
+  volumes : Volume.t list [@default []];
   cmd : string list [@default []];
-  envs : env list [@default []];
+  envs : Env.t list [@default []];
   name : string option [@default None];
   host : string option [@default None];
   user : string option [@default None];
@@ -55,5 +69,5 @@ type t = {
   stop_before : bool [@default false];
   stop_after_timeout : int option [@default Some 10];
   kill_timeout : int option [@default Some 10];
-  logs : logs option [@default None]
+  logs : Logs.t option [@default None]
 } [@@deriving yojson, show]

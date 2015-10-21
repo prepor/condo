@@ -32,17 +32,18 @@ type t = {
 }
 
 (* We just ignore fails in stop action *)
+let stop' t deploy =
+  let r = deploy.stop_checks () >>= fun _ ->
+    deploy.stop_discoveries () >>= fun _ ->
+    Docker.stop t.docker deploy.container in
+  r >>= (function
+      | Error err ->
+        print_endline ("Error in stopping" ^ (Utils.of_exn err));
+        return ()
+      | Ok _ -> return ())
+
 let stop t = function
-  | Some deploy ->
-    let r = deploy.stop_checks () >>= fun _ ->
-      deploy.stop_discoveries () >>= fun _ ->
-      Docker.stop t.docker deploy.container >>=? fun _ ->
-      Docker.rm t.docker deploy.container in
-    r >>= (function
-        | Error err ->
-          print_endline ("Error in stopping" ^ (Utils.of_exn err));
-          return ()
-        | Ok _ -> return ())
+  | Some deploy -> stop' t deploy
   | None -> return ()
 
 let stop_if_needed t state stop_before =
@@ -111,10 +112,11 @@ let discoveries_watcher t spec =
 
 let now () = let open Core.Time in now () |> to_epoch
 
-let register_services t spec container =
+let register_services t spec container ports =
   let suffix = Docker.container_to_string container in
   let register_service service_spec =
-    Consul.register_service t.consul ~id_suffix:suffix service_spec >>|?
+    let port = List.Assoc.find_exn ports service_spec.Spec.port in
+    Consul.register_service t.consul ~id_suffix:suffix service_spec port >>|?
     fun service_id -> (service_spec, service_id) in
   List.map spec.Spec.services register_service |> Deferred.all >>|
   partition_result >>| fun (res, errors) ->
@@ -131,8 +133,8 @@ let merge_envs_to_spec spec envs =
 
 let new_spec' t state spec discoveries_stopper =
   stop_if_needed t state spec.Spec.stop_before >>= fun state' ->
-  (Docker.start t.docker spec >>=? (fun container ->
-       register_services t spec container >>|? fun services ->
+  (Docker.start t.docker spec >>=? (fun (container, ports) ->
+       register_services t spec container ports >>|? fun services ->
        let deploy = { spec = spec;
                       container = container;
                       services = services;
@@ -159,14 +161,39 @@ let new_spec t state spec =
     new_spec' t state spec' discoveries_stopper
   | Error _ -> return state
 
-let new_discovery t state spec discoveries =
-  return state
+let new_discovery t state (d_spec, discovery) =
+  let deploy = match state with
+    | { current = Some deploy } -> deploy
+    | { next = Some deploy } -> deploy
+    | _ -> assert false in
+  let env = discovery_to_env d_spec discovery in
+  let spec' = merge_envs_to_spec deploy.spec [env] in
+  new_spec' t state spec' deploy.stop_discoveries
 
 let now_stable t state container =
-  return state
+  let new_state next = return { current = Some next;
+                                next = None;
+                                last_stable = Some next.spec } in
+  match state with
+  | { current = Some current_deploy;
+      next = Some next_deploy; } ->
+    stop' t current_deploy >>= fun _ ->
+    new_state next_deploy
+  | { next = Some next_deploy } ->
+    new_state next_deploy
+  | _ -> assert false
 
 let not_stable t state container =
-  return state
+  match (state.current, state.next, state.last_stable) with
+  | (Some deploy, _, Some last_stable) when deploy.container = container ->
+    stop' t deploy >>= fun _ ->
+    let state' = { state with current = None} in
+    new_spec t state' last_stable
+  | (Some _, Some deploy, _) when deploy.container = container ->
+    stop' t deploy >>= fun _ ->
+    let state' = { state with next = None} in
+    return state'
+  | _ -> assert false
 
 let try_again t state spec =
   match (state.current, state.next) with
@@ -176,7 +203,7 @@ let try_again t state spec =
 let apply_change t state change =
   match change with
   | NewSpec spec -> new_spec t state spec
-  | NewDiscovery (spec, discoveries) -> new_discovery t state spec discoveries
+  | NewDiscovery (d_spec, discoveries) -> new_discovery t state (d_spec, discoveries)
   | NowStable container -> now_stable t state container
   | NotStable container -> not_stable t state container
   | TryAgain spec -> try_again t state spec

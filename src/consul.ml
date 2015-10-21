@@ -28,7 +28,7 @@ end
 
 let create endpoint = { endpoint = Uri.of_string endpoint }
 
-let uri ?(query_params = []) t path =
+let make_uri ?(query_params = []) t path =
   (Uri.with_path t.endpoint path |> Uri.with_query) query_params
 
 let parse_discovery_body body =
@@ -81,11 +81,11 @@ let watch_uri t parser uri =
   (r, RunMonitor.closer monitor)
 
 let key t k =
-  let uri = uri t ("/v1/kv/" ^ k) in
+  let uri = make_uri t ("/v1/kv/" ^ k) in
   Uri.with_query uri [("raw", [])] |> watch_uri t parse_kv_body
 
 let discovery t ?tag (Service.Name service) =
-  let uri = uri t ("/v1/health/service/" ^ service) in
+  let uri = make_uri t ("/v1/health/service/" ^ service) in
   let uri' = match tag with
     | Some v -> Uri.add_query_param' uri ("tag", v)
     | None -> uri in
@@ -105,32 +105,26 @@ module RegisterService = struct
   } [@@deriving yojson, show]
 end
 
-exception BadStatus of Cohttp.Code.status_code
-let not_200_as_error (resp, body) =
-  let r = match Response.status resp with
-    | #Code.success_status -> Ok (resp, body)
-    | status -> Error (BadStatus status) in
-  return r
-
-let register_service t ?(id_suffix="") spec =
-  let open Spec in
-  let uri = uri t "/v1/agent/service/register" in
-  let (script, check_interval) = (spec.check.script, spec.check.interval) in
+let register_service t ?(id_suffix="") spec port =
+  let open Spec.Service in
+  let uri = make_uri t "/v1/agent/service/register" in
+  let (script, check_interval) = Spec.Check.(spec.check.script,
+                                             spec.check.interval) in
   let id = spec.name ^ "_" ^ id_suffix in
   let req = { RegisterService.
               id = id;
               name = spec.name;
               tags = spec.tags;
-              port = spec.port;
+              port = port;
               check = { RegisterService.
                         script = script;
                         interval = Time.Span.(check_interval |> of_int_sec |> to_short_string)}} in
   let body = RegisterService.to_yojson req |> Yojson.Safe.to_string |> Body.of_string in
   try_with (fun _ -> Client.post ~body: body uri) >>=?
-  not_200_as_error >>|? fun _ -> Service.ID id
+  Utils.HTTP.not_200_as_error >>|? fun _ -> Service.ID id
 
 let deregister_service t (Service.ID id) =
-  let uri = uri t ("/v1/agent/service/deregister/" ^ id) in
+  let uri = make_uri t ("/v1/agent/service/deregister/" ^ id) in
   try_with (fun _ -> Client.delete uri) >>|? fun _ -> ()
 
 let parse_checks_body body =
@@ -141,11 +135,11 @@ let parse_checks_body body =
   with exc -> Error (Failure "Parsing failed")
 
 let wait_for_passing_loop t (Service.ID service_id) timeout monitor =
-  let uri = uri t ("/v1/agent/checks") in
+  let uri = make_uri t ("/v1/agent/checks") in
   let rec tick () =
     if RunMonitor.is_running monitor then
       (try_with (fun _ -> Client.get uri) >>=?
-       not_200_as_error >>=? fun (resp, body) ->
+       Utils.HTTP.not_200_as_error >>=? fun (resp, body) ->
        try_with (fun _ -> Body.to_string body) >>=? fun body' ->
        parse_checks_body body' |> return  >>=? fun checks ->
        List.Assoc.find checks service_id |> fun op ->

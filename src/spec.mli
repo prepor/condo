@@ -1,74 +1,89 @@
-type image = { name : bytes; tag : bytes; }
-val image_to_yojson : image -> Yojson.Safe.json
-val image_of_yojson :
-  Yojson.Safe.json -> [ `Error of bytes | `Ok of image ]
-val pp_image : Format.formatter -> image -> unit
-val show_image : image -> bytes
-type env = { name : bytes; value : bytes; }
-val env_to_yojson : env -> Yojson.Safe.json
-val env_of_yojson : Yojson.Safe.json -> [ `Error of bytes | `Ok of env ]
-val pp_env : Format.formatter -> env -> unit
-val show_env : env -> bytes
-type discovery = {
-  service : bytes;
-  tag : bytes option;
-  multiple : bool;
-  env : bytes;
-}
-val discovery_to_yojson : discovery -> Yojson.Safe.json
-val discovery_of_yojson :
-  Yojson.Safe.json -> [ `Error of bytes | `Ok of discovery ]
-val pp_discovery : Format.formatter -> discovery -> unit
-val show_discovery : discovery -> bytes
-type volume = { from : bytes; to_ : bytes; }
-val volume_to_yojson : volume -> Yojson.Safe.json
-val volume_of_yojson :
-  Yojson.Safe.json -> [ `Error of bytes | `Ok of volume ]
-val pp_volume : Format.formatter -> volume -> unit
-val show_volume : volume -> bytes
-type logs = { log_type : bytes; config : Yojson.Safe.json option; }
-val logs_to_yojson : logs -> Yojson.Safe.json
-val logs_of_yojson :
-  Yojson.Safe.json -> [ `Error of bytes | `Ok of logs ]
-val pp_logs : Format.formatter -> logs -> unit
-val show_logs : logs -> bytes
-type check = { script : bytes; interval : int; timeout : int; }
-val check_to_yojson : check -> Yojson.Safe.json
-val check_of_yojson :
-  Yojson.Safe.json -> [ `Error of bytes | `Ok of check ]
-val pp_check : Format.formatter -> check -> unit
-val show_check : check -> bytes
-type service = {
-  name : bytes;
-  check : check;
-  port : int;
-  tags : bytes list;
-  host_port : int option;
-  udp : bool;
-}
-val service_to_yojson : service -> Yojson.Safe.json
-val service_of_yojson :
-  Yojson.Safe.json -> [ `Error of bytes | `Ok of service ]
-val pp_service : Format.formatter -> service -> unit
-val show_service : service -> bytes
+module Image :
+sig
+  type t = { name : string; tag : string; }
+  val to_yojson : t -> Yojson.Safe.json
+  val of_yojson : Yojson.Safe.json -> [ `Error of string | `Ok of t ]
+  val pp : Format.formatter -> t -> unit
+  val show : t -> string
+end
+module Env :
+sig
+  type t = { name : string; value : string; }
+  val to_yojson : t -> Yojson.Safe.json
+  val of_yojson : Yojson.Safe.json -> [ `Error of string | `Ok of t ]
+  val pp : Format.formatter -> t -> unit
+  val show : t -> string
+end
+module Discovery :
+sig
+  type t = {
+    service : string;
+    tag : string option;
+    multiple : bool;
+    env : string;
+  }
+  val to_yojson : t -> Yojson.Safe.json
+  val of_yojson : Yojson.Safe.json -> [ `Error of string | `Ok of t ]
+  val pp : Format.formatter -> t -> unit
+  val show : t -> string
+end
+module Volume :
+sig
+  type t = { from : string; to_ : string; }
+  val to_yojson : t -> Yojson.Safe.json
+  val of_yojson : Yojson.Safe.json -> [ `Error of string | `Ok of t ]
+  val pp : Format.formatter -> t -> unit
+  val show : t -> string
+end
+module Logs :
+sig
+  type t = { log_type : string; config : Yojson.Safe.json option; }
+  val to_yojson : t -> Yojson.Safe.json
+  val of_yojson : Yojson.Safe.json -> [ `Error of string | `Ok of t ]
+  val pp : Format.formatter -> t -> unit
+  val show : t -> string
+end
+module Check :
+sig
+  type t = { script : string; interval : int; timeout : int; }
+  val to_yojson : t -> Yojson.Safe.json
+  val of_yojson : Yojson.Safe.json -> [ `Error of string | `Ok of t ]
+  val pp : Format.formatter -> t -> unit
+  val show : t -> string
+end
+module Service :
+sig
+  type t = {
+    name : string;
+    check : Check.t;
+    port : int;
+    tags : string list;
+    host_port : int option;
+    udp : bool;
+  }
+  val to_yojson : t -> Yojson.Safe.json
+  val of_yojson : Yojson.Safe.json -> [ `Error of string | `Ok of t ]
+  val pp : Format.formatter -> t -> unit
+  val show : t -> string
+end
 type t = {
-  image : image;
-  discoveries : discovery list;
-  services : service list;
-  volumes : volume list;
-  cmd : bytes list;
-  envs : env list;
-  name : bytes option;
-  host : bytes option;
-  user : bytes option;
+  image : Image.t;
+  discoveries : Discovery.t list;
+  services : Service.t list;
+  volumes : Volume.t list;
+  cmd : string list;
+  envs : Env.t list;
+  name : string option;
+  host : string option;
+  user : string option;
   privileged : bool;
-  network_mode : bytes option;
+  network_mode : string option;
   stop_before : bool;
   stop_after_timeout : int option;
   kill_timeout : int option;
-  logs : logs option;
+  logs : Logs.t option;
 }
 val to_yojson : t -> Yojson.Safe.json
-val of_yojson : Yojson.Safe.json -> [ `Error of bytes | `Ok of t ]
+val of_yojson : Yojson.Safe.json -> [ `Error of string | `Ok of t ]
 val pp : Format.formatter -> t -> unit
-val show : t -> bytes
+val show : t -> string
