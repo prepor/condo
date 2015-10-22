@@ -4,9 +4,10 @@ open Async.Std
 type deploy = {
   spec: Spec.t;
   container: Docker.container;
-  services: (Spec.service * Consul.Service.id) list;
+  services: (Spec.Service.t * Consul.Service.id) list;
   stop_checks: (unit -> unit Deferred.t);
   stop_discoveries: (unit -> unit Deferred.t);
+  stop_supervisor: (unit -> unit Deferred.t) option;
   stable: bool;
   created_at: float;
   stable_at: float option;
@@ -19,7 +20,7 @@ type state = {
 }
 
 type change = NewSpec of Spec.t
-            | NewDiscovery of Spec.discovery * (string * int) list
+            | NewDiscovery of Spec.Discovery.t * (string * int) list
             | NowStable of Docker.container
             | NotStable of Docker.container
             | TryAgain of Spec.t
@@ -33,8 +34,11 @@ type t = {
 
 (* We just ignore fails in stop action *)
 let stop' t deploy =
-  let r = deploy.stop_checks () >>= fun _ ->
-    deploy.stop_discoveries () >>= fun _ ->
+  let r = deploy.stop_checks () >>= fun () ->
+    deploy.stop_discoveries () >>= fun () ->
+    (match deploy.stop_supervisor with
+     | Some s -> s ()
+     | None -> return ()) >>= fun () ->
     Docker.stop t.docker deploy.container in
   r >>= (function
       | Error err ->
@@ -57,7 +61,8 @@ let stop_if_needed t state stop_before =
   stop_next_if_need state >>= stop_current_if_need
 
 let stable_watcher t container services =
-  let wait_for = List.map services (fun (spec, id) -> (id, Spec.(Time.Span.of_int_sec spec.check.timeout))) in
+  let wait_for = List.map services (fun (spec, id) ->
+      (id, Spec.Service.(Time.Span.of_int_sec spec.check.Spec.Check.timeout))) in
   let (waiter, closer) = Consul.wait_for_passing t.consul wait_for in
   let stable_watcher' = waiter >>= function
     | Ok _ -> Pipe.write t.changes_w (NowStable container)
@@ -73,9 +78,9 @@ let partition_result l = List.partition_map l ~f: (function
 let discovery_to_env spec v =
   let open Spec in
   let format_pair = (fun (host, port) -> sprintf "%s:%i" host port ) in
-  let mk_env v = { value = v;
-                   name = spec.env; } in
-  match (v, spec.multiple) with
+  let mk_env v = { Env.value = v;
+                   name = spec.Discovery.env; } in
+  match (v, spec.Discovery.multiple) with
   | (v, true) -> List.map v ~f: format_pair |> String.concat ~sep:"," |> mk_env
   | (x::xs, false) -> format_pair x |> mk_env
   | ([], false) -> failwith "Empty discovery result"
@@ -91,10 +96,10 @@ let discoveries_watcher t spec =
   let discovery_watcher d_spec r =
     Pipe.iter r ~f: (fun v -> Pipe.write t.changes_w (NewDiscovery (d_spec, v)) ) in
   let discoveries' = List.map spec.Spec.discoveries ~f: (fun spec ->
-      (spec, Consul.discovery t.consul ?tag:spec.Spec.tag (Consul.Service.of_string spec.Spec.service))) in
+      Spec.Discovery.(spec, Consul.discovery t.consul ?tag:spec.tag (Consul.Service.of_string spec.service))) in
   let init_services = List.map discoveries' ~f: (fun (spec, (r, _)) ->
       Pipe.read r >>| (function
-          | `Eof -> Error ("Can't receive discovery for " ^ spec.Spec.service)
+          | `Eof -> Error ("Can't receive discovery for " ^ spec.Spec.Discovery.service)
           | `Ok v -> Ok (spec, v)))
                       |> Deferred.all >>| partition_result in
   with_timeout (Time.Span.of_int_sec 10) init_services >>= function
@@ -115,7 +120,7 @@ let now () = let open Core.Time in now () |> to_epoch
 let register_services t spec container ports =
   let suffix = Docker.container_to_string container in
   let register_service service_spec =
-    let port = List.Assoc.find_exn ports service_spec.Spec.port in
+    let port = List.Assoc.find_exn ports service_spec.Spec.Service.port in
     Consul.register_service t.consul ~id_suffix:suffix service_spec port >>|?
     fun service_id -> (service_spec, service_id) in
   List.map spec.Spec.services register_service |> Deferred.all >>|
@@ -140,6 +145,7 @@ let new_spec' t state spec discoveries_stopper =
                       services = services;
                       stop_checks = stable_watcher t container services;
                       stop_discoveries = discoveries_stopper;
+                      stop_supervisor = None;
                       stable = false;
                       created_at = now ();
                       stable_at = None; } in
@@ -170,10 +176,20 @@ let new_discovery t state (d_spec, discovery) =
   let spec' = merge_envs_to_spec deploy.spec [env] in
   new_spec' t state spec' deploy.stop_discoveries
 
+let supervisor_watcher t supervisor deploy =
+    supervisor >>= function
+    | Ok () -> return ()
+    | Error err -> stop' t deploy >>= fun () -> Pipe.write t.changes_w (TryAgain deploy.spec)
+
+
 let now_stable t state container =
-  let new_state next = return { current = Some next;
-                                next = None;
-                                last_stable = Some next.spec } in
+  let (supervisor, stop_supervisor) = Docker.supervisor t.docker container in
+  let new_state next =
+    let deploy = { next with stop_supervisor = Some stop_supervisor} in
+    supervisor_watcher t supervisor deploy |> don't_wait_for;
+    return { current = Some deploy;
+             next = None;
+             last_stable = Some next.spec } in
   match state with
   | { current = Some current_deploy;
       next = Some next_deploy; } ->

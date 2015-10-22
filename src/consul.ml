@@ -3,6 +3,8 @@ open Async.Std
 open Cohttp
 open Cohttp_async
 
+module RM = Utils.RunMonitor
+
 type t = { endpoint: Uri.t }
 
 module Service = struct
@@ -10,20 +12,6 @@ module Service = struct
   type name = Name of string
 
   let of_string s = Name s
-end
-
-module RunMonitor = struct
-  type t = Monitor of (unit Ivar .t * (bool ref))
-
-  let create () = (Monitor (Ivar.create (), ref true))
-
-  let completed (Monitor (v, _)) = Ivar.fill v ()
-
-  let is_running (Monitor (_, is_running)) = !is_running = true
-
-  let close (Monitor (v, is_running)) = is_running := false; Ivar.read v
-
-  let closer m = fun _ -> close m
 end
 
 let create endpoint = { endpoint = Uri.of_string endpoint }
@@ -45,8 +33,11 @@ let try_def ?(extract_exn = true) d =
   try_with ~extract_exn:extract_exn (fun _ -> d)
 
 let requests_loop parser uri monitor w =
+  let guarded_write v =
+    if RM.is_running monitor then Pipe.write w v
+    else return () in
   let rec loop last_res index =
-    if RunMonitor.is_running monitor then
+    if RM.is_running monitor then
       let try_again () = Time.Span.of_int_sec 2 |> after >>= fun _ -> loop last_res index in
       let uri2 = match index with
         | Some index2 -> Uri.add_query_params' uri [("index", index2); ("wait", "10s")]
@@ -60,9 +51,9 @@ let requests_loop parser uri monitor w =
               | Ok parsed ->
                 (match last_res with
                  | Some last_res' when last_res' = parsed -> loop last_res index2
-                 | _ -> Pipe.write w parsed >>= fun _ -> loop last_res index2)
+                 | _ -> guarded_write parsed >>= fun _ -> loop last_res index2)
               | Error error -> print_endline ("Error in parsing " ^ error); try_again ())
-        | #Code.client_error_status -> Pipe.close w; RunMonitor.completed monitor; return ()
+        | #Code.client_error_status -> Pipe.close w; RM.completed monitor; return ()
         | _ -> print_endline "Error in response";
           try_again () in
       print_endline ("Request: " ^ Uri.to_string uri2);
@@ -71,14 +62,14 @@ let requests_loop parser uri monitor w =
           | Error e ->
             e |> sexp_of_exn |> Sexp.to_string_hum |> print_endline;
             try_again ())
-    else RunMonitor.completed monitor |> return in
+    else RM.completed monitor |> return in
   loop None None
 
 let watch_uri t parser uri =
-  let monitor = RunMonitor.create () in
+  let monitor = RM.create () in
   let w = requests_loop parser uri monitor in
   let r = Pipe.init w in
-  (r, RunMonitor.closer monitor)
+  (r, RM.closer monitor)
 
 let key t k =
   let uri = make_uri t ("/v1/kv/" ^ k) in
@@ -137,7 +128,7 @@ let parse_checks_body body =
 let wait_for_passing_loop t (Service.ID service_id) timeout monitor =
   let uri = make_uri t ("/v1/agent/checks") in
   let rec tick () =
-    if RunMonitor.is_running monitor then
+    if RM.is_running monitor then
       (try_with (fun _ -> Client.get uri) >>=?
        Utils.HTTP.not_200_as_error >>=? fun (resp, body) ->
        try_with (fun _ -> Body.to_string body) >>=? fun body' ->
@@ -147,20 +138,22 @@ let wait_for_passing_loop t (Service.ID service_id) timeout monitor =
       | Error _ -> tick ()
       | Ok _ -> return `Up
     else
-      (RunMonitor.completed monitor;
+      (RM.completed monitor;
        return `Closed) in
   with_timeout timeout (tick ()) >>| function
-  | `Timeout -> Error (Failure ("Service timeout " ^ service_id))
+  | `Timeout ->
+    if RM.is_running monitor then Ok `Up
+    else Error (Failure ("Service timeout " ^ service_id))
   | `Result v -> Ok v
 
 let wait_for_passing t service_ids =
   let make (service_id, timeout) =
-    let monitor = RunMonitor.create () in
+    let monitor = RM.create () in
     (monitor, wait_for_passing_loop t service_id timeout monitor) in
   let loops = List.map service_ids make in
   let deferreds = List.map loops snd in
   let monitors = List.map loops fst in
-  let closer () = List.map monitors RunMonitor.close |> Deferred.all >>| fun _ -> () in
+  let closer () = List.map monitors RM.close |> Deferred.all >>| fun _ -> () in
   let res = Utils.Deferred.all_or_error deferreds >>| function
     | Ok v -> (match List.for_all v (function `Up -> true | _ -> false) with
         | true -> Ok ()
