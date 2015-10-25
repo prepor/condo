@@ -67,7 +67,7 @@ type t = {
   privileged : bool [@default false];
   network_mode : string option [@default None];
   stop_before : bool [@default false];
-  stop_after_timeout : int option [@default Some 10];
+  stop_after_timeout : int [@default 10];
   kill_timeout : int option [@default Some 10];
   logs : Logs.t option [@default None]
 } [@@deriving yojson, show]

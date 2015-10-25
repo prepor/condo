@@ -22,4 +22,5 @@ val register_service : t -> ?id_suffix:string -> Spec.Service.t -> int -> (Servi
 val deregister_service : t -> Service.id -> (unit, exn) Result.t Deferred.t
 
 (* After stop it always returns Ok *)
-val wait_for_passing : t -> (Service.id * Time.Span.t) list  -> ((unit, exn) Result.t Deferred.t * (unit -> unit Deferred.t))
+val wait_for_passing : t -> (Service.id * Time.Span.t) list  ->
+  [> `Closed | `Error of exn | `Pass ] Async.Std.Deferred.t * (unit -> unit)

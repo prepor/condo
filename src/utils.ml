@@ -3,6 +3,22 @@ open Async.Std
 
 module A = Async.Std
 
+let of_exn exn = exn |> sexp_of_exn |> Sexp.to_string_hum
+
+let random_str length =
+  let buf = Bigbuffer.create length in
+  let gen_char () = (match Random.int(26 + 26 + 10) with
+      |  n when n < 26 -> int_of_char 'a' + n
+      | n when n < 26 + 26 -> int_of_char 'A' + n - 26
+      | n -> int_of_char '0' + n - 26 - 26)
+                    |> char_of_int in
+  for i = 0 to length do
+    Bigbuffer.add_char buf (gen_char ())
+  done;
+  Bigbuffer.contents buf
+
+let exn_to_string exn = exn |> sexp_of_exn |> Sexp.to_string_hum
+
 module Deferred = struct
   let all_or_error' deferreds =
     Deferred.all deferreds >>| fun results ->
@@ -46,19 +62,24 @@ module HTTP = struct
   (*   try_with do_req >>=? not_200_as_error >>=? (fun (resp, body) -> *)
   (*       Cohttp_async.Body.to_string body >>= parse) *)
 
-  let simple ?(req=Get) ?body ~parser uri =
+  let simple ?(req=Get) ?body ?headers ~parser uri =
     let parse body = Result.try_with (fun () -> parser (Yojson.Basic.from_string body)) |> return in
     let req_f = Cohttp_async.Client.(match req with
         | Get -> fun uri -> get uri
         | Post -> fun uri ->
           let body' = match body with
             | Some v -> Some (Cohttp_async.Body.of_string v) | None -> None in
-          post ?body:body' uri
+          post ?headers ?body:body' uri
         | Delete -> fun uri -> delete uri
         | Put -> fun uri -> put uri) in
     let do_req () = req_f uri in
-    try_with do_req >>=? not_200_as_error >>=? (fun (resp, body) ->
-        Cohttp_async.Body.to_string body >>= parse)
+    try_with do_req >>=? not_200_as_error >>= function
+    | Error err ->
+      printf "Request %s failed: %s\n" (Uri.to_string uri) (of_exn err);
+      Error err |> return
+    | Ok (resp, body) -> (match Cohttp.Response.status resp with
+        | `No_content -> parse "{}"
+        | _ -> Cohttp_async.Body.to_string body >>= (fun v -> parse v))
 
 end
 
@@ -107,20 +128,6 @@ module RunMonitor = struct
 
   let closer m = fun _ -> close m
 end
-
-let of_exn exn = exn |> sexp_of_exn |> Sexp.to_string_hum
-
-let random_str length =
-  let buf = Bigbuffer.create length in
-  let gen_char () = (match Random.int(26 + 26 + 10) with
-      |  n when n < 26 -> int_of_char 'a' + n
-      | n when n < 26 + 26 -> int_of_char 'A' + n - 26
-      | n -> int_of_char '0' + n - 26 - 26)
-                    |> char_of_int in
-  for i = 0 to length do
-    Bigbuffer.add_char buf (gen_char ())
-  done;
-  Bigbuffer.contents buf
 
 (* let d = *)
 (*   Utils.Deferred.all_or_error [(after (Time.Span.of_int_sec 5) >>| fun _ -> Error "oops"); *)

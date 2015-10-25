@@ -5,9 +5,9 @@ type deploy = {
   spec: Spec.t;
   container: Docker.container;
   services: (Spec.Service.t * Consul.Service.id) list;
-  stop_checks: (unit -> unit Deferred.t);
+  stop_checks: (unit -> unit);
   stop_discoveries: (unit -> unit Deferred.t);
-  stop_supervisor: (unit -> unit Deferred.t) option;
+  stop_supervisor: (unit -> unit) option;
   stable: bool;
   created_at: float;
   stable_at: float option;
@@ -24,6 +24,7 @@ type change = NewSpec of Spec.t
             | NowStable of Docker.container
             | NotStable of Docker.container
             | TryAgain of Spec.t
+            | ContainerDown of deploy
 
 type t = {
   changes: change Pipe.Reader.t;
@@ -32,17 +33,29 @@ type t = {
   consul: Consul.t;
 }
 
+let spec_label spec =
+  Spec.Image.(sprintf "%s:%s" spec.Spec.image.name spec.Spec.image.tag)
+
+let deregister_services t deploy =
+  let f s = Consul.deregister_service t.consul (snd s) in
+  List.map deploy.services f |> Deferred.all >>| fun _ -> ()
+
 (* We just ignore fails in stop action *)
-let stop' t deploy =
-  let r = deploy.stop_checks () >>= fun () ->
-    deploy.stop_discoveries () >>= fun () ->
+let stop' t ?(timeout=0) deploy =
+  deploy.stop_checks ();
+  deregister_services t deploy >>= fun () ->
+  after (Time.Span.of_int_sec timeout) >>= fun () ->
+  printf "Stop container %s of deploy %s\n"
+    (Docker.container_to_string deploy.container) (spec_label deploy.spec);
+  let r = deploy.stop_discoveries () >>= fun () ->
     (match deploy.stop_supervisor with
-     | Some s -> s ()
+     | Some s -> s (); return ()
      | None -> return ()) >>= fun () ->
     Docker.stop t.docker deploy.container in
   r >>= (function
       | Error err ->
-        print_endline ("Error in stopping" ^ (Utils.of_exn err));
+        printf "Error in stopping of deploy %s, container %s: %s\n"
+          (spec_label deploy.spec) (Docker.container_to_string deploy.container) (Utils.of_exn err);
         return ()
       | Ok _ -> return ())
 
@@ -65,10 +78,12 @@ let stable_watcher t container services =
       (id, Spec.Service.(Time.Span.of_int_sec spec.check.Spec.Check.timeout))) in
   let (waiter, closer) = Consul.wait_for_passing t.consul wait_for in
   let stable_watcher' = waiter >>= function
-    | Ok _ -> Pipe.write t.changes_w (NowStable container)
-    | Error _ -> Pipe.write t.changes_w (NotStable container) in
+    | `Closed -> return ()
+    | `Pass -> Pipe.write t.changes_w (NowStable container)
+    | `Error err ->
+      printf "Error while stable watching: %s\n" (Utils.exn_to_string err);
+      Pipe.write t.changes_w (NotStable container) in
   stable_watcher' |> don't_wait_for;
-
   closer
 
 let partition_result l = List.partition_map l ~f: (function
@@ -118,7 +133,7 @@ let discoveries_watcher t spec =
 let now () = let open Core.Time in now () |> to_epoch
 
 let register_services t spec container ports =
-  let suffix = Docker.container_to_string container in
+  let suffix = Stringext.take (Docker.container_to_string container) 12 in
   let register_service service_spec =
     let port = List.Assoc.find_exn ports service_spec.Spec.Service.port in
     Consul.register_service t.consul ~id_suffix:suffix service_spec port >>|?
@@ -138,6 +153,7 @@ let merge_envs_to_spec spec envs =
 
 let new_spec' t state spec discoveries_stopper =
   stop_if_needed t state spec.Spec.stop_before >>= fun state' ->
+  printf "Starting container for %s" (spec_label spec);
   (Docker.start t.docker spec >>=? (fun (container, ports) ->
        register_services t spec container ports >>|? fun services ->
        let deploy = { spec = spec;
@@ -161,6 +177,7 @@ let new_spec' t state spec discoveries_stopper =
       | _ -> return state'))
 
 let new_spec t state spec =
+  printf "New deploy for spec %s. Waiting for discoveries\n" (spec_label spec);
   discoveries_watcher t spec >>= function
   | Ok (discoveries, discoveries_stopper) ->
     let spec' = merge_envs_to_spec spec discoveries in
@@ -172,15 +189,18 @@ let new_discovery t state (d_spec, discovery) =
     | { current = Some deploy } -> deploy
     | { next = Some deploy } -> deploy
     | _ -> assert false in
+  let pp_disc = sprintf "[%s]" (String.concat ~sep:","
+                                  (List.map discovery (fun (host,port) -> sprintf "%s:%i" host port))) in
+  printf "New discovery value %s -> %s for deploy %s\n"
+    Spec.Discovery.(d_spec.service) pp_disc (spec_label deploy.spec);
   let env = discovery_to_env d_spec discovery in
   let spec' = merge_envs_to_spec deploy.spec [env] in
   new_spec' t state spec' deploy.stop_discoveries
 
 let supervisor_watcher t supervisor deploy =
-    supervisor >>= function
-    | Ok () -> return ()
-    | Error err -> stop' t deploy >>= fun () -> Pipe.write t.changes_w (TryAgain deploy.spec)
-
+  supervisor >>= function
+  | Ok () -> return ()
+  | Error err -> Pipe.write t.changes_w (ContainerDown deploy)
 
 let now_stable t state container =
   let (supervisor, stop_supervisor) = Docker.supervisor t.docker container in
@@ -193,28 +213,46 @@ let now_stable t state container =
   match state with
   | { current = Some current_deploy;
       next = Some next_deploy; } ->
-    stop' t current_deploy >>= fun _ ->
+    let timeout = current_deploy.spec.Spec.stop_after_timeout in
+    printf "New stable container %s for deploy %s. Stop %s after %i seconds\n"
+      (Docker.container_to_string container) (spec_label next_deploy.spec) (spec_label current_deploy.spec)
+      timeout;
+    stop' t ~timeout current_deploy >>= fun _ ->
     new_state next_deploy
   | { next = Some next_deploy } ->
+    printf "New stable container %s for deploy %s.\n"
+      (Docker.container_to_string container) (spec_label next_deploy.spec);
     new_state next_deploy
   | _ -> assert false
 
 let not_stable t state container =
   match (state.current, state.next, state.last_stable) with
   | (Some deploy, _, Some last_stable) when deploy.container = container ->
+    printf "Not stable container %s for current deploy %s. Stop conatiner and start previous stable spec %s\n"
+      (Docker.container_to_string container) (spec_label deploy.spec) (spec_label last_stable);
     stop' t deploy >>= fun _ ->
     let state' = { state with current = None} in
     new_spec t state' last_stable
   | (Some _, Some deploy, _) when deploy.container = container ->
+    printf "Not stable container %s for next deploy %s. Stop it\n"
+      (Docker.container_to_string container) (spec_label deploy.spec);
     stop' t deploy >>= fun _ ->
     let state' = { state with next = None} in
     return state'
   | _ -> assert false
 
 let try_again t state spec =
+  printf "Try again %s\n" (spec_label spec);
   match (state.current, state.next) with
   | (None, None) -> new_spec t state spec
   | _ -> return state
+
+let container_down t state deploy =
+  printf "Supervisor failed for container %s of deploy %s\n"
+    (Docker.container_to_string deploy.container) (spec_label deploy.spec);
+  stop' t deploy >>= fun () ->
+  let state' = { state with current = None} in
+  try_again t state' deploy.spec
 
 let apply_change t state change =
   match change with
@@ -223,14 +261,45 @@ let apply_change t state change =
   | NowStable container -> now_stable t state container
   | NotStable container -> not_stable t state container
   | TryAgain spec -> try_again t state spec
+  | ContainerDown deploy -> container_down t state deploy
 
-let start t =
+let at_shutdown t state =
+  match state with
+  | {current = Some deploy} -> stop' t deploy
+  | _ -> return () >>= fun () ->
+    match state with
+    | {next = Some deploy} -> stop' t deploy
+    | _ -> return ()
+
+
+let start t spec_url =
+  let (changes, _close) = Consul.key t.consul spec_url in
+  let rec spec_watcher () =
+    Pipe.read changes >>= function
+    | `Eof -> assert false
+    | `Ok s -> let res = try
+                   Yojson.Safe.from_string s |> Spec.of_yojson |> function
+                   | `Error err -> Error (Failure err)
+                   | `Ok spec -> Ok spec
+                 with exc -> Error exc in
+      match res with
+      | Ok spec -> Pipe.write t.changes_w (NewSpec spec) >>= fun _ -> spec_watcher ()
+      | Error exn ->
+        print_endline ("Error in parsing" ^ (Utils.exn_to_string exn));
+        spec_watcher () in
+  let stop_marker = Ivar.create () in
   let rec tick state =
     Pipe.read t.changes
     >>= function
-    | `Eof -> return ()
+    | `Eof ->
+      at_shutdown t state >>= fun () ->
+      Ivar.fill stop_marker ();
+      return ()
     | `Ok change -> apply_change t state change >>= tick in
-  tick { current = None; next = None; last_stable = None }
+  let stopper () = Pipe.close t.changes_w; Ivar.read stop_marker in
+  spec_watcher () |> don't_wait_for;
+  tick { current = None; next = None; last_stable = None } |> don't_wait_for;
+  stopper
 
 let create consul docker =
   let (r, w) = Pipe.create () in

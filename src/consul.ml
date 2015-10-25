@@ -25,7 +25,7 @@ let parse_discovery_body body =
                          pair |> member "Service" |> member "Port" |> to_int) in
   let parse () = Yojson.Basic.from_string body |> to_list |> List.map ~f: parse_pair in
   try Ok (parse ())
-  with exc -> Error "Parsing failed"
+  with exc -> Error ("Parsing failed" ^ Utils.exn_to_string exc)
 
 let parse_kv_body body = Ok body
 
@@ -42,23 +42,35 @@ let requests_loop parser uri monitor w =
       let uri2 = match index with
         | Some index2 -> Uri.add_query_params' uri [("index", index2); ("wait", "10s")]
         | None -> uri in
-      let do_req () = Client.get uri2 >>= fun (resp, body) ->
+      let do_req () =
+        printf "Consul watcher %s: do request\n" (Uri.to_string uri);
+        Client.get uri2 >>= fun (resp, body) ->
         match Response.status resp with
         | #Code.success_status ->
           let index2 = Header.get resp.Response.headers "x-consul-index" in
-          if index = index2 then loop last_res index
+          if index = index2 then
+            (printf "Consul watcher %s: same index, do again\n" (Uri.to_string uri);
+             loop last_res index)
           else (Body.to_string body) >>= fun body' -> parser body' |> (function
               | Ok parsed ->
                 (match last_res with
-                 | Some last_res' when last_res' = parsed -> loop last_res index2
+                 | Some last_res' when last_res' = parsed ->
+                   printf "Consul watcher %s: same value, do again\n" (Uri.to_string uri);
+                   loop last_res index2
                  | _ -> guarded_write parsed >>= fun _ -> loop last_res index2)
-              | Error error -> print_endline ("Error in parsing " ^ error); try_again ())
-        | #Code.client_error_status -> Pipe.close w; RM.completed monitor; return ()
-        | _ -> print_endline "Error in response";
+              | Error error ->
+                printf "Consul watcher %s: parsing failed %s\n" (Uri.to_string uri) error;
+                try_again ())
+        | #Code.client_error_status ->
+          (* Pipe.close w; RM.completed monitor;return () *)
+          printf "Consul watcher %s: bad request, try again\n" (Uri.to_string uri);
+          try_again ()
+        | _ ->
+          printf "Consul watcher %s: bad request, try again\n" (Uri.to_string uri);
           try_again () in
-      print_endline ("Request: " ^ Uri.to_string uri2);
       try_with ~extract_exn:true do_req >>= (function
-          | Ok _ -> return ()
+          | Ok _ ->
+            return ()
           | Error e ->
             e |> sexp_of_exn |> Sexp.to_string_hum |> print_endline;
             try_again ())
@@ -111,52 +123,51 @@ let register_service t ?(id_suffix="") spec port =
                         script = script;
                         interval = Time.Span.(check_interval |> of_int_sec |> to_short_string)}} in
   let body = RegisterService.to_yojson req |> Yojson.Safe.to_string |> Body.of_string in
+  printf "Register service %s on port %i\n" id port;
   try_with (fun _ -> Client.post ~body: body uri) >>=?
   Utils.HTTP.not_200_as_error >>|? fun _ -> Service.ID id
 
 let deregister_service t (Service.ID id) =
   let uri = make_uri t ("/v1/agent/service/deregister/" ^ id) in
+  printf "Deregister service %s\n" id;
   try_with (fun _ -> Client.delete uri) >>|? fun _ -> ()
 
-let parse_checks_body body =
+let parse_checks_body id body =
   let open Yojson.Basic.Util in
-  let parse v = v |> member "Status" |> to_string  in
-  let parse' () = Yojson.Basic.from_string body |> Yojson.Basic.Util.to_assoc |> List.Assoc.map ~f:parse in
+  let body' = Yojson.Basic.from_string body in
+  let parse' () = Yojson.Basic.Util.(body' |> member (sprintf "service:%s" id) |> member "Status" |> to_string )
+                  |> (=) "passing" in
   try Ok (parse' ())
-  with exc -> Error (Failure "Parsing failed")
+  with exc -> Error (Failure ("Parsing failed" ^ Utils.exn_to_string exc))
 
-let wait_for_passing_loop t (Service.ID service_id) timeout monitor =
+let wait_for_passing_loop t (Service.ID service_id) timeout is_running =
   let uri = make_uri t ("/v1/agent/checks") in
   let rec tick () =
-    if RM.is_running monitor then
+    printf "Waiting for %s\n" service_id;
+    if !is_running then
       (try_with (fun _ -> Client.get uri) >>=?
        Utils.HTTP.not_200_as_error >>=? fun (resp, body) ->
        try_with (fun _ -> Body.to_string body) >>=? fun body' ->
-       parse_checks_body body' |> return  >>=? fun checks ->
-       List.Assoc.find checks service_id |> fun op ->
-       Result.of_option op (Failure "unknown service_id") |> return) >>= function
-      | Error _ -> tick ()
-      | Ok _ -> return `Up
+       parse_checks_body service_id body' |> return  >>=? fun is_passing ->
+       if is_passing then Ok () |> return
+       else Error (Failure "Service is down") |> return
+      ) >>= function
+      | Error err -> after (Time.Span.of_int_sec 1) >>= tick
+      | Ok () -> Ok () |> return
     else
-      (RM.completed monitor;
-       return `Closed) in
+      Error (Failure "Closed") |> return in
   with_timeout timeout (tick ()) >>| function
-  | `Timeout ->
-    if RM.is_running monitor then Ok `Up
-    else Error (Failure ("Service timeout " ^ service_id))
-  | `Result v -> Ok v
+  | `Timeout -> Error (Failure ("Timeouted " ^ service_id))
+  | `Result Error err -> Error err
+  | `Result Ok () -> Ok ()
 
 let wait_for_passing t service_ids =
-  let make (service_id, timeout) =
-    let monitor = RM.create () in
-    (monitor, wait_for_passing_loop t service_id timeout monitor) in
-  let loops = List.map service_ids make in
-  let deferreds = List.map loops snd in
-  let monitors = List.map loops fst in
-  let closer () = List.map monitors RM.close |> Deferred.all >>| fun _ -> () in
+  let is_running = ref true in
+  let make (service_id, timeout) = wait_for_passing_loop t service_id timeout is_running in
+  let deferreds = List.map service_ids make in
   let res = Utils.Deferred.all_or_error deferreds >>| function
-    | Ok v -> (match List.for_all v (function `Up -> true | _ -> false) with
-        | true -> Ok ()
-        | false -> Error (Failure "Closed"))
-    | Error err -> Error err in
-  (res, closer)
+    | Ok _ -> `Pass
+    | Error err ->
+      if !is_running then `Error err
+      else `Closed in
+  (res, fun () -> is_running := false)

@@ -1,3 +1,5 @@
+module StdStream = Stream
+
 open Core.Std
 open Async.Std
 open Cohttp
@@ -19,54 +21,49 @@ let create endpoint = { endpoint = Uri.of_string endpoint }
 let make_uri ?(query_params = []) t path =
   (Uri.with_path t.endpoint path |> Uri.with_query') query_params
 
-(* let rename docker name = *)
-
 let rm docker container = Error (Failure "foo") |> return
 
 let pull_image t image =
-  let is_error line =
-    let open Yojson.Basic.Util in
-    let parse () = Yojson.Basic.from_string line |> member "Error" |> to_string_option in
-    try parse () |> function
-      | Some error_str -> Error (Failure error_str)
-      | None -> Ok ()
-    with exc -> Error (Failure "Parsing failed") in
-  let rec error_checker r =
-    Pipe.read r >>= function
-    | `Eof -> Ok () |> return
-    | `Ok v -> (match (is_error v) with
-        | Error e ->
-          Utils.Pipe.dummy_reader r |> don't_wait_for;
-          Error e |> return
-        | Ok () -> error_checker r) in
+  (* let is_error line = *)
+  (*   let open Yojson.Basic.Util in *)
+  (*   let parse () = Yojson.Basic.from_string line |> member "Error" |> to_string_option in *)
+  (*   try parse () |> function *)
+  (*     | Some error_str -> Error (Failure error_str) *)
+  (*     | None -> Ok () *)
+  (*   with exc -> Error (Failure ("Parsing failed" ^ Utils.exn_to_string exc)) in *)
+  (* let rec error_checker r = *)
+  (*   Pipe.read r >>= function *)
+  (*   | `Eof -> Ok () |> return *)
+  (*   | `Ok v -> (match (is_error v) with *)
+  (*       | Error e -> *)
+  (*         Utils.Pipe.dummy_reader r |> don't_wait_for; *)
+  (*         Error e |> return *)
+  (*       | Ok () -> error_checker r) in *)
+  let error_checker s =
+    let stream = Yojson.Basic.stream_from_string s in
+    let rec check () =
+      match StdStream.next stream with
+      | exception StdStream.Failure -> Ok ()
+      | exception err -> Error err
+      | v -> Yojson.Basic.Util.(match v |> member "Error" |> to_string_option with
+          | exception err -> Error err
+          | _ -> check ()) in
+    check () in
   let params = Spec.Image.([("fromImage", image.name); ("tag", image.tag)]) in
   let uri = make_uri t ~query_params:params "/images/create" in
   let do_req () = Client.post uri in
   try_with do_req >>=? Utils.HTTP.not_200_as_error >>=? fun (resp, body) ->
-  CA.Body.to_pipe body |> Utils.Pipe.to_lines |> error_checker
+  (CA.Body.to_string body >>| error_checker)
 
 let receive_image_id t image =
   let uri = make_uri t Spec.Image.(sprintf "/images/%s:%s/json" image.name image.tag) in
   Utils.HTTP.simple uri
     ~parser: (fun v -> Yojson.Basic.Util.(v |> member "Id" |> to_string))
 
-let stop t container = Error (Failure "foo") |> return
-
-(* cmd := &createContainerCmd{ *)
-(*    Host:    spec.Host, *)
-(*    User:    spec.User, *)
-(*    Image:   spec.Image.Id, *)
-(*    Cmd:     spec.Cmd, *)
-(*    Env:     envs, *)
-(*    Volumes: volumes, *)
-(*    HostConfig: hostConfig{ *)
-(*      Binds:        binds, *)
-(*      PortBindings: portBindings, *)
-(*      Privileged:   spec.Privileged, *)
-(*      NetworkMode:  spec.NetworkMode, *)
-(*      LogConfig:    logs, *)
-(*    }, *)
-(*  } *)
+let stop t container =
+  let uri = make_uri t Spec.Image.(sprintf "/containers/%s/stop" (container_to_string container)) in
+  Utils.HTTP.(simple uri ~req:Post
+    ~parser: (fun v -> ()))
 
 
 module CreateContainer = struct
@@ -127,6 +124,7 @@ let create_container t spec image_id =
                      host_config = host_config; }) in
   let body' = body |> CreateContainer.to_yojson |> Yojson.Safe.to_string in
   Utils.HTTP.(simple uri ~req:Post ~body:body'
+                ~headers: (Cohttp.Header.init_with "Content-Type" "application/json")
                 ~parser: (fun v -> Yojson.Basic.Util.(v |> member "Id" |> to_string)))
 
 (* Ignores any error *)
@@ -154,12 +152,11 @@ let receive_mapping t spec container =
       let key = Spec.Service.(sprintf "%d/%s" s.port (service_to_protocol s)) in
       let open Yojson.Basic.Util in
       let to_ = data
-                |> member "NetworkSettings"
+                |> member "NetworkSettings" |> member "Ports"
                 |> member key |> index 0
                 |> member "HostPort" |> to_string |> int_of_string in
       (s.Spec.Service.port, to_) in
-  Utils.HTTP.(simple uri ~req:Post
-                ~parser: (fun v -> List.map spec.Spec.services (parse_service v)))
+  Utils.HTTP.(simple uri ~parser: (fun v -> List.map spec.Spec.services (parse_service v)))
 
 (* val start : t -> Spec.t -> ((container * (int * int) list), exn) Result.t Deferred.t *)
 let start t spec =
@@ -169,16 +166,17 @@ let start t spec =
   create_container t spec >>=? fun container ->
   let container' = Id container in
   (rename_old_container t spec >>=? fun () ->
-   start_container t spec container >>=?  fun () ->
+   start_container t spec container >>=? fun () ->
    receive_mapping t spec container) >>= function
   | Ok mapping -> Ok (container', mapping) |> return
   | Error err -> (stop t container' >>= fun _ -> Error err |> return )
 
 let supervisor t container =
   let uri = make_uri t (sprintf "/containers/%s/wait" (container_to_string container)) in
-  let do_req () = Client.get uri in
-  let monitor = RM.create () in
+  let do_req () = Client.post uri in
+  let is_running = ref true in
   let s = try_with do_req >>=? Utils.HTTP.not_200_as_error >>= fun res ->
-    if RM.is_running monitor then Error (Failure "Container stopped") |> return
+    if !is_running then
+      Error (Failure "Container stopped") |> return
     else Ok () |> return in
-  (s, RM.closer monitor)
+  (s, fun () -> is_running := false)

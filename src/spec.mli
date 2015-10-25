@@ -79,7 +79,7 @@ type t = {
   privileged : bool;
   network_mode : string option;
   stop_before : bool;
-  stop_after_timeout : int option;
+  stop_after_timeout : int;
   kill_timeout : int option;
   logs : Logs.t option;
 }
