@@ -36,44 +36,57 @@ let requests_loop parser uri monitor w =
   let guarded_write v =
     if RM.is_running monitor then Pipe.write w v
     else return () in
+  let get_key last_res index =
+    let uri' = match index with
+      | Some index2 -> Uri.add_query_params' uri [("index", index2); ("wait", "10s")]
+      | None -> uri in
+    let do_req () =
+      printf "Consul watcher %s: do request\n" (Uri.to_string uri);
+      Client.get uri' >>= fun (resp, body) ->
+      match Response.status resp with
+      | #Code.success_status ->
+        (match (index, Header.get resp.Response.headers "x-consul-index") with
+         | (None, None) -> Error `SameIndex |> return
+         | (Some index, Some index2) when index = index2 -> Error `SameIndex |> return
+         | (Some index, None) -> Error `UnknownIndex |> return
+         | (_, Some index2) ->
+           (Body.to_string body) >>| fun body' -> parser body' |> (function
+               | Ok parsed -> (match last_res with
+                   | Some last_res' when last_res' = parsed -> Error (`SameValue index2)
+                   | _ -> Ok (parsed, index2))
+               | Error error -> Error (`ParsingError (index2, error))))
+      | status ->
+        Error (`BadStatus status) |> return in
+    try_with ~extract_exn:true do_req >>= function
+    | Ok (Ok v) -> `Key v |> return
+    | Ok (Error v) -> return v
+    | Error exn -> `ConnectionError exn |> return in
+
   let rec loop last_res index =
     if RM.is_running monitor then
       let try_again () = Time.Span.of_int_sec 2 |> after >>= fun _ -> loop last_res index in
-      let uri2 = match index with
-        | Some index2 -> Uri.add_query_params' uri [("index", index2); ("wait", "10s")]
-        | None -> uri in
-      let do_req () =
-        printf "Consul watcher %s: do request\n" (Uri.to_string uri);
-        Client.get uri2 >>= fun (resp, body) ->
-        match Response.status resp with
-        | #Code.success_status ->
-          let index2 = Header.get resp.Response.headers "x-consul-index" in
-          if index = index2 then
-            (printf "Consul watcher %s: same index, do again\n" (Uri.to_string uri);
-             loop last_res index)
-          else (Body.to_string body) >>= fun body' -> parser body' |> (function
-              | Ok parsed ->
-                (match last_res with
-                 | Some last_res' when last_res' = parsed ->
-                   printf "Consul watcher %s: same value, do again\n" (Uri.to_string uri);
-                   loop last_res index2
-                 | _ -> guarded_write parsed >>= fun _ -> loop last_res index2)
-              | Error error ->
-                printf "Consul watcher %s: parsing failed %s\n" (Uri.to_string uri) error;
-                try_again ())
-        | #Code.client_error_status ->
-          (* Pipe.close w; RM.completed monitor;return () *)
-          printf "Consul watcher %s: bad request, try again\n" (Uri.to_string uri);
-          try_again ()
-        | _ ->
-          printf "Consul watcher %s: bad request, try again\n" (Uri.to_string uri);
-          try_again () in
-      try_with ~extract_exn:true do_req >>= (function
-          | Ok _ ->
-            return ()
-          | Error e ->
-            e |> sexp_of_exn |> Sexp.to_string_hum |> print_endline;
-            try_again ())
+      let uri_s = (Uri.to_string uri) in
+      get_key last_res index >>= function
+      | `Key (res, index') ->
+        guarded_write res >>= fun () ->
+        loop (Some res) (Some index')
+      | `SameValue index' ->
+        printf "Consul watcher %s: same value, do again\n" uri_s;
+        loop last_res (Some index')
+      | `SameIndex -> try_again ()
+      (* if impossible if consul works correctly *)
+      | `UnknownIndex ->
+        printf "Consul watcher %s: none index, try again\n" uri_s;
+        try_again ()
+      | `ParsingError (index', err) ->
+        printf "Consul watcher %s: parsing error, try again\n" err ;
+        loop last_res (Some index')
+      | `BadStatus status ->
+        printf "Consul watcher %s: bad status %s, try again\n" uri_s (Cohttp.Code.string_of_status status);
+        try_again ()
+      | `ConnectionError exn ->
+        printf "Consul watcher %s: connection error %s, try again\n" uri_s (Utils.of_exn exn);
+        try_again ()
     else RM.completed monitor |> return in
   loop None None
 

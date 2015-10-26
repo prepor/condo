@@ -115,6 +115,11 @@ module Pipe = struct
     | `Ok _ -> dummy_reader r
 end
 
+module Assoc = struct
+  let merge l1 l2 =
+    List.fold l2 ~init:l1 ~f:(fun acc (k,v) -> List.Assoc.add acc k v)
+end
+
 module RunMonitor = struct
   type t = Monitor of (unit Ivar .t * (bool ref))
 

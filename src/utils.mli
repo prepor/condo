@@ -20,6 +20,10 @@ module Pipe : sig
   val dummy_reader : 'a Pipe.Reader.t -> unit Async.Std.Deferred.t
 end
 
+module Assoc : sig
+  val merge : ('a, 'b) List.Assoc.t -> ('a, 'b) List.Assoc.t -> ('a, 'b) List.Assoc.t
+end
+
 module RunMonitor : sig
   type t
 

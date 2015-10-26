@@ -90,15 +90,18 @@ let partition_result l = List.partition_map l ~f: (function
     | Ok v -> `Fst v
     | Error v -> `Snd v)
 
-let discovery_to_env spec v =
+let discovery_to_env' spec v =
   let open Spec in
   let format_pair = (fun (host, port) -> sprintf "%s:%i" host port ) in
   let mk_env v = { Env.value = v;
                    name = spec.Discovery.env; } in
   match (v, spec.Discovery.multiple) with
-  | (v, true) -> List.map v ~f: format_pair |> String.concat ~sep:"," |> mk_env
-  | (x::xs, false) -> format_pair x |> mk_env
-  | ([], false) -> failwith "Empty discovery result"
+  | (v, true) -> List.map v ~f: format_pair |> String.concat ~sep:"," |> mk_env |> Option.some
+  | (x::xs, false) -> format_pair x |> mk_env |> Option.some
+  | ([], false) -> None
+
+let discovery_to_env spec v =
+  Option.value_exn (discovery_to_env' spec v)
 
 let schedule_try_again t spec =
   after (Time.Span.of_int_sec 5) >>= (fun _ ->
@@ -113,13 +116,21 @@ let discoveries_watcher t spec =
   let discoveries' = List.map spec.Spec.discoveries ~f: (fun spec ->
       Spec.Discovery.(spec, Consul.discovery t.consul ?tag:spec.tag (Consul.Service.of_string spec.service))) in
   let init_services = List.map discoveries' ~f: (fun (spec, (r, _)) ->
-      Pipe.read r >>| (function
-          | `Eof -> Error ("Can't receive discovery for " ^ spec.Spec.Discovery.service)
-          | `Ok v -> Ok (spec, v)))
+      let rec tick () =
+        Pipe.read r >>= (function
+            | `Eof -> Error ("Can't receive discovery for " ^ spec.Spec.Discovery.service) |> return
+            | `Ok [] ->
+              printf "Empty discovery for %s, waiting more\n" spec.Spec.Discovery.service;
+              tick ()
+            | `Ok v -> Ok (spec, v) |> return) in
+      tick ())
                       |> Deferred.all >>| partition_result in
+  let closer () = (List.map discoveries' ~f: (fun (_, (_, stopper)) -> stopper ()))
+                  |> Deferred.all >>| (fun _ -> ()) in
   with_timeout (Time.Span.of_int_sec 10) init_services >>= function
   | `Timeout ->
     print_endline "Timeout while resolving discoveries";
+    closer () >>= fun () ->
     schedule_try_again t spec;
     Error (Failure "Cant resolve discoveries") |> return
   | `Result (init_discoveries, fails) ->
@@ -127,8 +138,7 @@ let discoveries_watcher t spec =
     else
       (List.iter discoveries' ~f: (fun (spec, (r, _)) -> discovery_watcher spec r |> ignore);
        (let vals = List.map init_discoveries ~f: (Tuple.T2.uncurry discovery_to_env) in
-        return (Ok (vals, (fun _ -> (List.map discoveries' ~f: (fun (_, (_, stopper)) -> stopper ()))
-                                    |> Deferred.all >>| (fun _ -> ()))))))
+        return (Ok (vals, closer))))
 
 let now () = let open Core.Time in now () |> to_epoch
 
@@ -148,12 +158,16 @@ let register_services t spec container ports =
   | _ -> Ok res
 
 let merge_envs_to_spec spec envs =
+  let envs_to_assoc envs =
+    List.map envs (fun {Spec.Env.name; value} -> (name, value)) in
+  let assoc_to_envs l = List.map l (fun (name,value) -> {Spec.Env.name; value}) in
   let open Spec in
-  { spec with envs = List.concat [spec.envs; envs]}
+  { spec with envs = Utils.Assoc.merge (envs_to_assoc spec.envs) (envs_to_assoc envs)
+                     |> assoc_to_envs }
 
 let new_spec' t state spec discoveries_stopper =
   stop_if_needed t state spec.Spec.stop_before >>= fun state' ->
-  printf "Starting container for %s" (spec_label spec);
+  printf "Starting container for %s\n" (spec_label spec);
   (Docker.start t.docker spec >>=? (fun (container, ports) ->
        register_services t spec container ports >>|? fun services ->
        let deploy = { spec = spec;
@@ -176,26 +190,36 @@ let new_spec' t state spec discoveries_stopper =
       | (None, Some prev) -> schedule_try_again t prev.spec; return state'
       | _ -> return state'))
 
+let format_discovery { Spec.Env.name; value; _} =
+  sprintf "%s -> %s" name value
+
 let new_spec t state spec =
   printf "New deploy for spec %s. Waiting for discoveries\n" (spec_label spec);
   discoveries_watcher t spec >>= function
   | Ok (discoveries, discoveries_stopper) ->
+    printf "Init discoveries for spec %s: %s\n"
+      (spec_label spec) (List.map discoveries format_discovery |> String.concat ~sep:", ");
     let spec' = merge_envs_to_spec spec discoveries in
     new_spec' t state spec' discoveries_stopper
   | Error _ -> return state
 
 let new_discovery t state (d_spec, discovery) =
-  let deploy = match state with
-    | { current = Some deploy } -> deploy
-    | { next = Some deploy } -> deploy
-    | _ -> assert false in
-  let pp_disc = sprintf "[%s]" (String.concat ~sep:","
-                                  (List.map discovery (fun (host,port) -> sprintf "%s:%i" host port))) in
-  printf "New discovery value %s -> %s for deploy %s\n"
-    Spec.Discovery.(d_spec.service) pp_disc (spec_label deploy.spec);
-  let env = discovery_to_env d_spec discovery in
-  let spec' = merge_envs_to_spec deploy.spec [env] in
-  new_spec' t state spec' deploy.stop_discoveries
+  let env = discovery_to_env' d_spec discovery in
+  match env with
+  | None -> return state
+  | Some env' ->
+    let deploy = match state with
+      | { current = Some deploy } -> deploy
+      | { next = Some deploy } -> deploy
+      | _ -> assert false in
+    let spec' = merge_envs_to_spec deploy.spec [env'] in
+    (* For cases then discovery was changed to None and returned to Some with
+       same value. We can save us here from waste restart *)
+    if spec' = deploy.spec then return state
+    else
+      (printf "New discovery for deploy %s: %s\n" (spec_label deploy.spec) (format_discovery env');
+       let spec' = merge_envs_to_spec deploy.spec [env'] in
+       new_spec' t state spec' deploy.stop_discoveries)
 
 let supervisor_watcher t supervisor deploy =
   supervisor >>= function
