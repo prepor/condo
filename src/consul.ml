@@ -41,7 +41,7 @@ let requests_loop parser uri monitor w =
       | Some index2 -> Uri.add_query_params' uri [("index", index2); ("wait", "10s")]
       | None -> uri in
     let do_req () =
-      printf "Consul watcher %s: do request\n" (Uri.to_string uri);
+      L.debug "Consul watcher %s: do request" (Uri.to_string uri);
       Client.get uri' >>= fun (resp, body) ->
       match Response.status resp with
       | #Code.success_status ->
@@ -71,21 +71,23 @@ let requests_loop parser uri monitor w =
         guarded_write res >>= fun () ->
         loop (Some res) (Some index')
       | `SameValue index' ->
-        printf "Consul watcher %s: same value, do again\n" uri_s;
+        L.debug "Consul watcher %s: same value, do again" uri_s;
         loop last_res (Some index')
-      | `SameIndex -> try_again ()
-      (* if impossible if consul works correctly *)
+      | `SameIndex ->
+        L.debug "Consul watcher %s: same index, do again" uri_s;
+        loop last_res index
+      (* it impossible if consul works correctly *)
       | `UnknownIndex ->
-        printf "Consul watcher %s: none index, try again\n" uri_s;
+        L.error "Consul watcher %s: none index, try again" uri_s;
         try_again ()
       | `ParsingError (index', err) ->
-        printf "Consul watcher %s: parsing error, try again\n" err ;
+        L.error "Consul watcher %s: parsing error, try again" err;
         loop last_res (Some index')
       | `BadStatus status ->
-        printf "Consul watcher %s: bad status %s, try again\n" uri_s (Cohttp.Code.string_of_status status);
+        L.error "Consul watcher %s: bad status %s, try again" uri_s (Cohttp.Code.string_of_status status);
         try_again ()
       | `ConnectionError exn ->
-        printf "Consul watcher %s: connection error %s, try again\n" uri_s (Utils.of_exn exn);
+        L.error "Consul watcher %s: connection error %s, try again\n" uri_s (Utils.of_exn exn);
         try_again ()
     else RM.completed monitor |> return in
   loop None None
@@ -97,7 +99,7 @@ let watch_uri t parser uri =
   (r, RM.closer monitor)
 
 let key t k =
-  let uri = make_uri t ("/v1/kv/" ^ k) in
+  let uri = make_uri t ("/v1/kv" ^ k) in
   Uri.with_query uri [("raw", [])] |> watch_uri t parse_kv_body
 
 let discovery t ?tag (Service.Name service) =
@@ -136,13 +138,13 @@ let register_service t ?(id_suffix="") spec port =
                         script = script;
                         interval = Time.Span.(check_interval |> of_int_sec |> to_short_string)}} in
   let body = RegisterService.to_yojson req |> Yojson.Safe.to_string |> Body.of_string in
-  printf "Register service %s on port %i\n" id port;
+  L.info "Register service %s on port %i" id port;
   try_with (fun _ -> Client.post ~body: body uri) >>=?
   Utils.HTTP.not_200_as_error >>|? fun _ -> Service.ID id
 
 let deregister_service t (Service.ID id) =
   let uri = make_uri t ("/v1/agent/service/deregister/" ^ id) in
-  printf "Deregister service %s\n" id;
+  L.info"Deregister service %s" id;
   try_with (fun _ -> Client.delete uri) >>|? fun _ -> ()
 
 let parse_checks_body id body =
@@ -156,7 +158,7 @@ let parse_checks_body id body =
 let wait_for_passing_loop t (Service.ID service_id) timeout is_running =
   let uri = make_uri t ("/v1/agent/checks") in
   let rec tick () =
-    printf "Waiting for %s\n" service_id;
+    L.debug "Waiting for %s" service_id;
     if !is_running then
       (try_with (fun _ -> Client.get uri) >>=?
        Utils.HTTP.not_200_as_error >>=? fun (resp, body) ->

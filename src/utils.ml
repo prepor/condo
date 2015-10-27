@@ -75,7 +75,7 @@ module HTTP = struct
     let do_req () = req_f uri in
     try_with do_req >>=? not_200_as_error >>= function
     | Error err ->
-      printf "Request %s failed: %s\n" (Uri.to_string uri) (of_exn err);
+      L.error "Request %s failed: %s" (Uri.to_string uri) (of_exn err);
       Error err |> return
     | Ok (resp, body) -> (match Cohttp.Response.status resp with
         | `No_content -> parse "{}"
