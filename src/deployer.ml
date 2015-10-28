@@ -129,7 +129,7 @@ let discoveries_watcher t spec =
                   |> Deferred.all >>| (fun _ -> ()) in
   with_timeout (Time.Span.of_int_sec 10) init_services >>= function
   | `Timeout ->
-    print_endline "Timeout while resolving discoveries";
+    L.error "Timeout while resolving discoveries";
     closer () >>= fun () ->
     schedule_try_again t spec;
     Error (Failure "Cant resolve discoveries") |> return
@@ -183,7 +183,8 @@ let new_spec' t state spec discoveries_stopper =
        then { state' with current = Some deploy }
        else { state' with next = Some deploy }) >>= function
    | Ok v -> return v
-   | Error err -> print_endline ("Error while applying new spec: " ^ (Utils.of_exn err));
+   | Error err ->
+     L.error "Error while applying new spec: %s" (Utils.of_exn err);
      (match (state'.current, state.current) with
       | (Some _, _) -> return state'
       (* Try to recover prev stable spec *)
@@ -309,7 +310,7 @@ let start t spec_url =
       match res with
       | Ok spec -> Pipe.write t.changes_w (NewSpec spec) >>= fun _ -> spec_watcher ()
       | Error exn ->
-        print_endline ("Error in parsing" ^ (Utils.exn_to_string exn));
+        L.error "Error in parsing spec from %s: %s" spec_url (Utils.exn_to_string exn);
         spec_watcher () in
   let stop_marker = Ivar.create () in
   let rec tick state =

@@ -36,8 +36,9 @@ module Logs = struct
 end
 
 module Check = struct
+  type method_ = HTTP of string | Script of string [@@deriving yojson, show]
   type t = {
-    script : string;
+    method_ : method_ [@key "method"];
     interval : int;
     timeout : int;
   } [@@deriving yojson, show]

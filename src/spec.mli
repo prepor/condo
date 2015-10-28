@@ -45,7 +45,13 @@ sig
 end
 module Check :
 sig
-  type t = { script : string; interval : int; timeout : int; }
+  type method_ = HTTP of string | Script of string
+  val method__to_yojson : method_ -> Yojson.Safe.json
+  val method__of_yojson :
+    Yojson.Safe.json -> [ `Error of string | `Ok of method_ ]
+  val pp_method_ : Format.formatter -> method_ -> unit
+  val show_method_ : method_ -> string
+  type t = { method_ : method_; interval : int; timeout : int; }
   val to_yojson : t -> Yojson.Safe.json
   val of_yojson : Yojson.Safe.json -> [ `Error of string | `Ok of t ]
   val pp : Format.formatter -> t -> unit

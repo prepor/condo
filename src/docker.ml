@@ -136,7 +136,9 @@ let rename_old_container t spec =
     let uri = make_uri t (sprintf "/containers/%s/rename?name=%s" n new_name) in
     Utils.HTTP.(simple uri ~req:Post
                   ~parser: (fun _ -> ())) >>| function
-    | Error err -> print_endline "some rename error!"; Ok ()
+    | Error err ->
+      L.error "Renaming error (it can be ok) of %s: %s" n (Utils.of_exn err);
+      Ok ();
     | Ok () -> Ok ()
 
 let start_container t spec container =

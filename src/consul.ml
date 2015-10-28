@@ -111,7 +111,8 @@ let discovery t ?tag (Service.Name service) =
 
 module RegisterService = struct
   type check = {
-    script: string [@key "Script"];
+    script: string option [@key "Script"];
+    http: string option [@key "HTTP"];
     interval: string [@key "Interval"];
   } [@@deriving yojson, show]
   type t = {
@@ -126,9 +127,11 @@ end
 let register_service t ?(id_suffix="") spec port =
   let open Spec.Service in
   let uri = make_uri t "/v1/agent/service/register" in
-  let (script, check_interval) = Spec.Check.(spec.check.script,
-                                             spec.check.interval) in
+  let {Spec.Check.interval} = spec.check in
   let id = spec.name ^ "_" ^ id_suffix in
+  let (script, http) = Spec.Check.(match spec.check.method_ with
+      | HTTP v -> (None, Some v)
+      | Script v -> (Some v, None)) in
   let req = { RegisterService.
               id = id;
               name = spec.name;
@@ -136,7 +139,8 @@ let register_service t ?(id_suffix="") spec port =
               port = port;
               check = { RegisterService.
                         script = script;
-                        interval = Time.Span.(check_interval |> of_int_sec |> to_short_string)}} in
+                        http = http;
+                        interval = Time.Span.(interval |> of_int_sec |> to_short_string)}} in
   let body = RegisterService.to_yojson req |> Yojson.Safe.to_string |> Body.of_string in
   L.info "Register service %s on port %i" id port;
   try_with (fun _ -> Client.post ~body: body uri) >>=?
