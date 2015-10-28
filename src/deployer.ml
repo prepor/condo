@@ -174,19 +174,23 @@ let new_spec' t state spec discoveries_stopper =
   stop_if_needed t state spec.Spec.stop_before >>= fun state' ->
   L.info "Starting container for %s" (spec_label spec);
   (Docker.start t.docker spec >>=? (fun (container, ports) ->
-       register_services t spec container ports >>|? fun services ->
-       let deploy = { spec = spec;
-                      container = container;
-                      services = services;
-                      stop_checks = stable_watcher t container services;
-                      stop_discoveries = discoveries_stopper;
-                      stop_supervisor = None;
-                      stable = false;
-                      created_at = now ();
-                      stable_at = None; } in
-       if spec.Spec.stop_before
-       then { state' with current = Some deploy }
-       else { state' with next = Some deploy }) >>= function
+       register_services t spec container ports >>= (function
+           | Error err -> (Docker.stop t.docker container >>= fun _ ->
+                           Error err |> return)
+           | Ok services ->
+             let deploy = { spec = spec;
+                            container = container;
+                            services = services;
+                            stop_checks = stable_watcher t container services;
+                            stop_discoveries = discoveries_stopper;
+                            stop_supervisor = None;
+                            stable = false;
+                            created_at = now ();
+                            stable_at = None; } in
+             let state'' = if spec.Spec.stop_before
+               then { state' with current = Some deploy }
+               else { state' with next = Some deploy } in
+             Ok state'' |> return)) >>= function
    | Ok v -> return v
    | Error err ->
      L.error "Error while applying new spec: %s" (Utils.of_exn err);
