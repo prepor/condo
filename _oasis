@@ -15,8 +15,8 @@ Library condo
   Modules: Deployer
   InternalModules: Spec, Docker, Consul, Utils, L
   BuildDepends:
-    async,yojson,core,ppx_import,ppx_deriving.std,ppx_deriving_yojson,cohttp,cohttp.async,threads,async_ssl,
-    jsonm
+    async,yojson,core,ppx_import,ppx_deriving.std,ppx_deriving_yojson,cohttp,cohttp.async,threads,
+    mustache
 
 Executable condo
   Path: src

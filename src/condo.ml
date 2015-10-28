@@ -7,7 +7,8 @@ module A = Async.Std
 let start docker consul endpoint =
   let consul' = Consul.create consul in
   let docker' = Docker.create docker in
-  let deployer = Deployer.create consul' docker' in
+  (* FIXME host of deployer should be customizable *)
+  let deployer = Deployer.create consul' docker' (Docker.host docker') in
   let stopper = Deployer.start deployer endpoint in
   let at_shutdown _s =
     A.Deferred.map (stopper ()) (fun () -> A.Shutdown.shutdown 0)

@@ -124,27 +124,38 @@ module RegisterService = struct
   } [@@deriving yojson, show]
 end
 
-let register_service t ?(id_suffix="") spec port =
-  let open Spec.Service in
-  let uri = make_uri t "/v1/agent/service/register" in
-  let {Spec.Check.interval} = spec.check in
-  let id = spec.name ^ "_" ^ id_suffix in
-  let (script, http) = Spec.Check.(match spec.check.method_ with
-      | HTTP v -> (None, Some v)
-      | Script v -> (Some v, None)) in
-  let req = { RegisterService.
-              id = id;
-              name = spec.name;
-              tags = spec.tags;
-              port = port;
-              check = { RegisterService.
-                        script = script;
-                        http = http;
-                        interval = Time.Span.(interval |> of_int_sec |> to_short_string)}} in
-  let body = RegisterService.to_yojson req |> Yojson.Safe.to_string |> Body.of_string in
-  L.info "Register service %s on port %i" id port;
-  try_with (fun _ -> Client.post ~body: body uri) >>=?
-  Utils.HTTP.not_200_as_error >>|? fun _ -> Service.ID id
+let register_service t ?(id_suffix="") spec template_vars port =
+  let apply_template s =
+    Result.try_with (fun () ->
+        let template = Mustache.of_string s in
+        let json = `O (List.Assoc.map template_vars (fun v -> `String v)) in
+        Mustache.render template json) in
+  let make_http_path path =
+    (sprintf "http://%s:%i%s" (List.Assoc.find template_vars "host" |> Option.value ~default:"") port path) in
+  let {Spec.Service.name; check; tags} = spec in
+  let check' = Spec.Check.(match check.method_ with
+      | Http v -> Result.(apply_template v >>| (fun v' -> (None, Some v')))
+      | Script v -> Result.(apply_template v >>| (fun v' -> (Some v', None)))
+      | HttpPath v -> Ok (None, Some (make_http_path v))) in
+  let register_service' (script, http) =
+    let uri = make_uri t "/v1/agent/service/register" in
+    let {Spec.Check.interval} = check in
+    let id = name ^ "_" ^ id_suffix in
+    let req = { RegisterService.
+                id = id;
+                name = name;
+                tags = tags;
+                port = port;
+                check = { RegisterService.
+                          script = script;
+                          http = http;
+                          interval = Time.Span.(interval |> of_int_sec |> to_short_string)}} in
+    let body = RegisterService.to_yojson req |> Yojson.Safe.to_string |> Body.of_string in
+    L.info "Register service %s on port %i" id port;
+    L.debug "Service config: \n%s" (RegisterService.show req);
+    try_with (fun _ -> Client.post ~body: body uri) >>=?
+    Utils.HTTP.not_200_as_error >>|? fun _ -> Service.ID id in
+  check' |> return >>=? register_service'
 
 let deregister_service t (Service.ID id) =
   let uri = make_uri t ("/v1/agent/service/deregister/" ^ id) in

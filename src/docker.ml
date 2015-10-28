@@ -18,27 +18,14 @@ let container_to_string = function
 
 let create endpoint = { endpoint = Uri.of_string endpoint }
 
+let host t = Uri.host_with_default t.endpoint ~default:""
+
 let make_uri ?(query_params = []) t path =
   (Uri.with_path t.endpoint path |> Uri.with_query') query_params
 
 let rm docker container = Error (Failure "foo") |> return
 
 let pull_image t image =
-  (* let is_error line = *)
-  (*   let open Yojson.Basic.Util in *)
-  (*   let parse () = Yojson.Basic.from_string line |> member "Error" |> to_string_option in *)
-  (*   try parse () |> function *)
-  (*     | Some error_str -> Error (Failure error_str) *)
-  (*     | None -> Ok () *)
-  (*   with exc -> Error (Failure ("Parsing failed" ^ Utils.exn_to_string exc)) in *)
-  (* let rec error_checker r = *)
-  (*   Pipe.read r >>= function *)
-  (*   | `Eof -> Ok () |> return *)
-  (*   | `Ok v -> (match (is_error v) with *)
-  (*       | Error e -> *)
-  (*         Utils.Pipe.dummy_reader r |> don't_wait_for; *)
-  (*         Error e |> return *)
-  (*       | Ok () -> error_checker r) in *)
   let error_checker s =
     let stream = Yojson.Basic.stream_from_string s in
     let rec check () =
@@ -123,6 +110,7 @@ let create_container t spec image_id =
                      exposed_ports = `Assoc (List.map spec.services make_exposed);
                      host_config = host_config; }) in
   let body' = body |> CreateContainer.to_yojson |> Yojson.Safe.to_string in
+  L.debug "Container config:\n%s" (CreateContainer.show body);
   Utils.HTTP.(simple uri ~req:Post ~body:body'
                 ~headers: (Cohttp.Header.init_with "Content-Type" "application/json")
                 ~parser: (fun v -> Yojson.Basic.Util.(v |> member "Id" |> to_string)))

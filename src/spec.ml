@@ -36,7 +36,10 @@ module Logs = struct
 end
 
 module Check = struct
-  type method_ = HTTP of string | Script of string [@@deriving yojson, show]
+  type method_ = Http of string
+               | Script of string
+               | HttpPath of string
+    [@@deriving yojson, show]
   type t = {
     method_ : method_ [@key "method"];
     interval : int;

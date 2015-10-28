@@ -31,6 +31,7 @@ type t = {
   changes_w: change Pipe.Writer.t;
   docker: Docker.t;
   consul: Consul.t;
+  host: string;
 }
 
 let spec_label spec =
@@ -143,10 +144,14 @@ let discoveries_watcher t spec =
 let now () = let open Core.Time in now () |> to_epoch
 
 let register_services t spec container ports =
-  let suffix = Stringext.take (Docker.container_to_string container) 12 in
+  let container' = Docker.container_to_string container in
+  let suffix = Stringext.take container' 12 in
   let register_service service_spec =
     let port = List.Assoc.find_exn ports service_spec.Spec.Service.port in
-    Consul.register_service t.consul ~id_suffix:suffix service_spec port >>|?
+    let template_vars = [("host", t.host);
+                         ("port", string_of_int port);
+                         ("container", container')] in
+    Consul.register_service t.consul ~id_suffix:suffix service_spec template_vars port >>|?
     fun service_id -> (service_spec, service_id) in
   List.map spec.Spec.services register_service |> Deferred.all >>|
   partition_result >>| fun (res, errors) ->
@@ -264,6 +269,13 @@ let not_stable t state container =
     stop' t deploy >>= fun _ ->
     let state' = { state with next = None} in
     return state'
+  | (None, Some deploy, _) when deploy.container = container ->
+    L.error "Not stable container %s for next deploy %s. But we don't have another one. Try again"
+      (Docker.container_to_string container) (spec_label deploy.spec);
+    stop' t deploy >>= fun _ ->
+    let state' = { state with next = None} in
+    schedule_try_again t deploy.spec;
+    return state'
   | _ -> assert false
 
 let try_again t state spec =
@@ -326,9 +338,10 @@ let start t spec_url =
   tick { current = None; next = None; last_stable = None } |> don't_wait_for;
   stopper
 
-let create consul docker =
+let create consul docker host =
   let (r, w) = Pipe.create () in
   { consul = consul;
     docker = docker;
+    host = host;
     changes = r;
     changes_w = w; }
