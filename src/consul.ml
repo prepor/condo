@@ -6,6 +6,7 @@ open Cohttp_async
 module RM = Utils.RunMonitor
 
 type t = { endpoint: Uri.t }
+type consul = t
 
 module Service = struct
   type id = ID of string
@@ -150,11 +151,11 @@ let register_service t ?(id_suffix="") spec template_vars port =
                           script = script;
                           http = http;
                           interval = Time.Span.(interval |> of_int_sec |> to_short_string)}} in
-    let body = RegisterService.to_yojson req |> Yojson.Safe.to_string |> Body.of_string in
+    let body = RegisterService.to_yojson req |> Yojson.Safe.to_string in
     L.info "Register service %s on port %i" id port;
     L.debug "Service config: \n%s" (RegisterService.show req);
-    try_with (fun _ -> Client.post ~body: body uri) >>=?
-    Utils.HTTP.not_200_as_error >>|? fun _ -> Service.ID id in
+    Utils.HTTP.(simple uri ~req:Post ~body ~parser:Fn.ignore) >>|? fun _ ->
+    Service.ID id in
   check' |> return >>=? register_service'
 
 let deregister_service t (Service.ID id) =
@@ -162,10 +163,39 @@ let deregister_service t (Service.ID id) =
   L.info"Deregister service %s" id;
   try_with (fun _ -> Client.delete uri) >>|? fun _ -> ()
 
+module CreateSession = struct
+  type t =
+    { lock_delay : string [@key "LockDelay"];
+      checks : string list [@key "Checks"];
+      behavior : string [@key "Behavior"];
+    } [@@deriving yojson, show]
+end
+
+let create_session t check =
+  let uri = make_uri t "/v1/session/create" in
+  let parser body = Yojson.Basic.Util.( body |> member "ID" |> to_string) in
+  let req = { CreateSession.
+              lock_delay = "0s";
+              checks = [check];
+              behavior = "delete"; } in
+  let body = CreateSession.to_yojson req |> Yojson.Safe.to_string in
+  Utils.HTTP.(simple uri ~body ~req:Put ~parser)
+
+let put t ?session ~path ~body =
+  let uri = make_uri t (sprintf "/v1/kv/%s" path) in
+  let uri' = match session with
+    | Some v -> Uri.add_query_param' uri ("acquire", v)
+    | None -> uri in
+  Utils.HTTP.(simple uri' ~body ~req:Put ~parser: (fun _ -> ()))
+
 let parse_checks_body id body =
   let open Yojson.Basic.Util in
   let body' = Yojson.Basic.from_string body in
-  let parse' () = Yojson.Basic.Util.(body' |> member (sprintf "service:%s" id) |> member "Status" |> to_string )
+  let parse' () = Yojson.Basic.Util.
+                    (body'
+                     |> member (sprintf "service:%s" id)
+                     |> member "Status"
+                     |> to_string )
                   |> (=) "passing" in
   try Ok (parse' ())
   with exc -> Error (Failure ("Parsing failed" ^ Utils.exn_to_string exc))
@@ -201,3 +231,49 @@ let wait_for_passing t service_ids =
       if !is_running then `Error err
       else `Closed in
   (res, fun () -> is_running := false)
+
+module Advertiser = struct
+  type t = {
+    consul : consul;
+    tags : string list;
+    port : int;
+    prefix : string
+  }
+
+  let create consul ~tags ~port ~prefix = { consul; tags; port; prefix }
+
+  let start t =
+    let (r, w) = Pipe.create () in
+    let start_advertiser path session =
+      Pipe.iter r ~f:(fun body ->
+          put t.consul ~path ~session ~body >>| function
+          | Ok () -> ()
+          | Error err -> L.error "Logging while putting advertising value: %s" (Utils.of_exn err);)
+      |> don't_wait_for in
+    let uri = make_uri t.consul "/v1/agent/service/register" in
+    let id = "condo_" ^ Utils.random_str 10 in
+    let service = (Service.ID id) in
+    let stopper () = deregister_service t.consul service >>| fun _ -> () in
+    let req = { RegisterService.
+                id = id;
+                name = "condo";
+                tags = t.tags;
+                port = t.port;
+                check = { RegisterService.
+                          http = Some (sprintf "http://0.0.0.0:%i/" t.port);
+                          script = None;
+                          interval = "5s"}} in
+    let body = RegisterService.to_yojson req |> Yojson.Safe.to_string in
+    L.debug "Register itself as %s" id;
+    L.debug "Service config: \n%s" (RegisterService.show req);
+    Utils.HTTP.(simple uri ~req:Post ~parser:Fn.ignore ~body) >>=? fun () ->
+    let wait = (wait_for_passing t.consul [(service, Time.Span.of_int_sec 5)] |> fst >>| function
+      | `Pass -> Ok ()
+      | `Error err -> Error err
+      | `Closed -> assert false) in
+    wait >>=? fun () ->
+    create_session t.consul (sprintf "service:%s" id) >>|?
+    start_advertiser (sprintf "%s/%s" t.prefix id) >>= function
+    | Ok () -> Ok (w, stopper) |> return
+    | Error err -> stopper () >>| fun () -> Error err
+end

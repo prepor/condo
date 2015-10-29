@@ -32,6 +32,7 @@ type t = {
   docker: Docker.t;
   consul: Consul.t;
   host: string;
+  advertisements: string Pipe.Writer.t option;
 }
 
 let spec_label spec =
@@ -295,14 +296,43 @@ let container_down t state deploy =
   let state' = { state with current = None} in
   try_again t state' deploy.spec
 
+module SerializedState = struct
+  module Deploy = struct
+    type t = {
+      image: string
+    } [@@deriving yojson, show]
+  end
+  type t = {
+    current: Deploy.t option;
+    next: Deploy.t option;
+    last_stable: string option;
+  } [@@deriving yojson, show]
+end
+
+let serialize_state state =
+  let spec_to_image {Spec.image} =
+    let {Spec.Image.name; tag} = image in
+    sprintf "%s:%s" name tag in
+  let serialize_deploy = Option.map ~f:(fun {spec} ->
+      {SerializedState.Deploy.image = spec_to_image spec}) in
+  {SerializedState.
+    current = serialize_deploy state.current;
+    next = serialize_deploy state.next;
+    last_stable = Option.map state.last_stable spec_to_image}
+  |> SerializedState.to_yojson |> Yojson.Safe.to_string
+
+
 let apply_change t state change =
-  match change with
-  | NewSpec spec -> new_spec t state spec
-  | NewDiscovery (d_spec, discoveries) -> new_discovery t state (d_spec, discoveries)
-  | NowStable container -> now_stable t state container
-  | NotStable container -> not_stable t state container
-  | TryAgain spec -> try_again t state spec
-  | ContainerDown deploy -> container_down t state deploy
+  (match change with
+   | NewSpec spec -> new_spec t state spec
+   | NewDiscovery (d_spec, discoveries) -> new_discovery t state (d_spec, discoveries)
+   | NowStable container -> now_stable t state container
+   | NotStable container -> not_stable t state container
+   | TryAgain spec -> try_again t state spec
+   | ContainerDown deploy -> container_down t state deploy) >>| fun state' ->
+  Option.iter t.advertisements ~f:(fun w ->
+      Pipe.write_without_pushback w (serialize_state state'));
+  state'
 
 let at_shutdown t state =
   match state with
@@ -311,7 +341,6 @@ let at_shutdown t state =
     match state with
     | {next = Some deploy} -> stop' t deploy
     | _ -> return ()
-
 
 let start t spec_url =
   let (changes, _close) = Consul.key t.consul spec_url in
@@ -342,10 +371,22 @@ let start t spec_url =
   tick { current = None; next = None; last_stable = None } |> don't_wait_for;
   stopper
 
-let create consul docker host =
+let create ?advertiser ~consul ~docker ~host ~spec =
   let (r, w) = Pipe.create () in
-  { consul = consul;
-    docker = docker;
-    host = host;
-    changes = r;
-    changes_w = w; }
+  let advertisements = match advertiser with
+    | Some a ->
+      let (a_r, a_w) = Pipe.create() in
+      (Consul.Advertiser.start a >>= (function
+           | Error err ->
+             L.error "Error while starting advertiser: %s" (Utils.of_exn err);
+             Shutdown.shutdown 1;
+             return ()
+           | Ok (a_w', stopper) ->
+             Shutdown.at_shutdown (fun () -> stopper ());
+             Pipe.transfer a_r a_w' ~f:Fn.id) |> don't_wait_for);
+      Some a_w
+    | None -> None in
+  let t = { consul; docker; host; advertisements;
+            changes = r;
+            changes_w = w; } in
+  start t spec

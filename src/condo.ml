@@ -4,27 +4,17 @@ open Cmdliner
 
 module A = Async.Std
 
-let start docker consul endpoint =
-  let consul' = Consul.create consul in
-  let docker' = Docker.create docker in
+let start docker consul endpoint advertiser =
   (* FIXME host of deployer should be customizable *)
-  let deployer = Deployer.create consul' docker' (Docker.host docker') in
-  let stopper = Deployer.start deployer endpoint in
+  let deployer = Deployer.create ~consul ~docker
+      ~host:(Docker.host docker) ~spec:endpoint ?advertiser in
   let at_shutdown _s =
-    A.Deferred.map (stopper ()) (fun () -> A.Shutdown.shutdown 0)
+    A.Deferred.map
+      (deployer ())
+      (fun () -> A.Shutdown.shutdown 0)
     |> A.don't_wait_for in
   A.Signal.handle A.Signal.terminating ~f:at_shutdown;
   never_returns (A.Scheduler.go ())
-
-let consul =
-  let doc = "Set ups Consul API endpoint" in
-  let env = Arg.env_var "CONSUL" ~doc in
-  Arg.(value & opt string "tcp://0.0.0.0:8500" & info ["consul"] ~env ~doc)
-
-let docker =
-  let doc = "Set ups docker API endpoint" in
-  let env = Arg.env_var "DOCKER" ~doc in
-  Arg.(value & opt string "tcp://0.0.0.0:2376" & info ["docker"] ~env ~doc)
 
 let endpoint =
   let doc = "Source of spec. Like consul:///services/test.json" in
@@ -48,13 +38,48 @@ let setup_log' is_debug =
   Async.Std.Log.Global.set_level (Async.Std.Log.Level.of_string level);
   ()
 
+let docker =
+  let endpoint =
+    let doc = "Set ups docker API endpoint" in
+    let env = Arg.env_var "DOCKER" ~doc in
+    Arg.(value & opt string "tcp://0.0.0.0:2376" & info ["docker"] ~env ~doc) in
+  let docker' endpoint = Docker.create endpoint in
+  Term.(const docker' $ endpoint)
+
+let consul =
+  let endpoint =
+    let doc = "Set ups Consul API endpoint" in
+    let env = Arg.env_var "CONSUL" ~doc in
+    Arg.(value & opt string "tcp://0.0.0.0:8500" & info ["consul"] ~env ~doc) in
+  let consul' endpoint = Consul.create endpoint in
+  Term.(const consul' $ endpoint)
+
 let debug =
   let doc = "Debug logs" in
   Arg.(value & flag & info ["d"; "debug"] ~doc)
 
+let advertise =
+  let port =
+    let doc = "Advertise itself as consul service and store state in KV" in
+    Arg.(value & opt (some int) None & info ["a"; "advertise"] ~doc ~docv:"PORT") in
+  let tags =
+    let doc = "List of tags with condo will advertise itself" in
+    Arg.(value & opt (list string) [] & info ["tag"] ~doc ~docv:"TAG") in
+  let prefix =
+    let doc = "KV's prefix in which condo will stores it's state if advertising" in
+    Arg.(value & opt string "condo" & info ["prefix"] ~doc ~docv:"PREFIX") in
+  let advertise' port tags prefix consul =
+    (match port with
+     | Some p ->
+       Server.create p |> A.don't_wait_for;
+       Some (Consul.Advertiser.create consul ~tags ~prefix ~port:p)
+     | None -> None)
+  in
+  Term.(const advertise' $ port $ tags $ prefix $ consul)
+
 let setup_log =
   Term.(const setup_log' $ debug)
 
-let condo_t = Term.(const start $ docker $ consul $ endpoint $ setup_log)
+let condo_t = Term.(const start $ docker $ consul $ endpoint $ advertise $ setup_log)
 
 let () = match Term.eval (condo_t, info)  with `Error _ -> exit 1 | _ -> exit 0

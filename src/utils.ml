@@ -63,15 +63,16 @@ module HTTP = struct
   (*       Cohttp_async.Body.to_string body >>= parse) *)
 
   let simple ?(req=Get) ?body ?headers ~parser uri =
-    let parse body = Result.try_with (fun () -> parser (Yojson.Basic.from_string body)) |> return in
+    let parse = function
+      | "" -> Result.try_with (fun () -> parser `Null) |> return
+      | body -> Result.try_with (fun () -> parser (Yojson.Basic.from_string body)) |> return in
+    let body' = match body with
+      | Some v -> Some (Cohttp_async.Body.of_string v) | None -> None in
     let req_f = Cohttp_async.Client.(match req with
         | Get -> fun uri -> get uri
-        | Post -> fun uri ->
-          let body' = match body with
-            | Some v -> Some (Cohttp_async.Body.of_string v) | None -> None in
-          post ?headers ?body:body' uri
-        | Delete -> fun uri -> delete uri
-        | Put -> fun uri -> put uri) in
+        | Post -> fun uri -> post ?headers ?body:body' uri
+        | Put -> fun uri -> put ?headers ?body:body' uri
+        | Delete -> fun uri -> delete uri) in
     let do_req () = req_f uri in
     try_with do_req >>=? not_200_as_error >>= function
     | Error err ->

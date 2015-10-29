@@ -1,7 +1,3 @@
 open Async.Std
 
-type t
-
-val create : Consul.t -> Docker.t -> string -> t
-
-val start : t -> string -> (unit -> unit Deferred.t)
+val create : ?advertiser:Consul.Advertiser.t -> consul:Consul.t -> docker:Docker.t -> host:string -> spec:string -> (unit -> unit Deferred.t)

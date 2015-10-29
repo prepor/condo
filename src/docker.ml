@@ -48,7 +48,9 @@ let receive_image_id t image =
     ~parser: (fun v -> Yojson.Basic.Util.(v |> member "Id" |> to_string))
 
 let stop t container =
-  let uri = make_uri t Spec.Image.(sprintf "/containers/%s/stop" (container_to_string container)) in
+  let container' = (container_to_string container) in
+  L.debug "Stop container %s" container';
+  let uri = make_uri t Spec.Image.(sprintf "/containers/%s/stop" container') in
   Utils.HTTP.(simple uri ~req:Post
     ~parser: (fun v -> ()))
 
