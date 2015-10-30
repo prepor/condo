@@ -28,7 +28,7 @@ val wait_for_passing : t -> (Service.id * Time.Span.t) list  ->
 
 module Advertiser : sig
   type t
-  val create : consul -> tags:string list -> port:int -> prefix:string -> t
+  val create : consul -> tags:string list -> prefix:string -> t
 
   val start : t -> (string Pipe.Writer.t * (unit -> unit Deferred.t), exn) Result.t Deferred.t
 end

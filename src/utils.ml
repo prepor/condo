@@ -48,20 +48,6 @@ module HTTP = struct
 
   type http_method = Get | Post | Delete | Put
 
-  (* let simple : 'a. ?req:http_method -> *)
-  (*   ?parser:(Yojson.Basic.json -> 'a) -> Uri.t -> ('a, exn) Result.t A.Deferred.t = *)
-  (*   fun ?(req=Get) ?parser uri -> *)
-  (*   let parser = match parser with Some v -> v | None -> fun _ -> () in *)
-  (*   let parse body = Result.try_with (fun () -> parser (Yojson.Basic.from_string body)) |> return in *)
-  (*   let req_f = Cohttp_async.Client.(match req with *)
-  (*       | Get -> fun uri -> get uri *)
-  (*       | Post -> fun uri -> post uri *)
-  (*       | Delete -> fun uri -> delete uri *)
-  (*       | Put -> fun uri -> put uri) in *)
-  (*   let do_req () = req_f uri in *)
-  (*   try_with do_req >>=? not_200_as_error >>=? (fun (resp, body) -> *)
-  (*       Cohttp_async.Body.to_string body >>= parse) *)
-
   let simple ?(req=Get) ?body ?headers ~parser uri =
     let parse = function
       | "" -> Result.try_with (fun () -> parser `Null) |> return

@@ -236,11 +236,26 @@ module Advertiser = struct
   type t = {
     consul : consul;
     tags : string list;
-    port : int;
     prefix : string
   }
 
-  let create consul ~tags ~port ~prefix = { consul; tags; port; prefix }
+  let create consul ~tags ~prefix = { consul; tags; prefix }
+
+  let server () =
+    let callback ~body _a _req =
+      Server.respond_with_string ~code:`OK "Condo is alive!\n" in
+    let port_waiter = Ivar.create () in
+    let where_to_listen =
+      Tcp.Where_to_listen.create
+        ~socket_type:Socket.Type.tcp
+        ~address:(Socket.Address.Inet.create_bind_any ~port:0)
+        ~listening_on:(fun (`Inet (_, port)) ->
+            L.info "Advertiser started on %i" port;
+            Ivar.fill port_waiter port;
+            port) in
+    (Server.create where_to_listen callback >>| fun _ -> ())
+    |> don't_wait_for;
+    Ivar.read port_waiter
 
   let start t =
     let (r, w) = Pipe.create () in
@@ -254,26 +269,28 @@ module Advertiser = struct
     let id = "condo_" ^ Utils.random_str 10 in
     let service = (Service.ID id) in
     let stopper () = deregister_service t.consul service >>| fun _ -> () in
-    let req = { RegisterService.
-                id = id;
-                name = "condo";
-                tags = t.tags;
-                port = t.port;
-                check = { RegisterService.
-                          http = Some (sprintf "http://0.0.0.0:%i/" t.port);
-                          script = None;
-                          interval = "5s"}} in
-    let body = RegisterService.to_yojson req |> Yojson.Safe.to_string in
-    L.debug "Register itself as %s" id;
-    L.debug "Service config: \n%s" (RegisterService.show req);
-    Utils.HTTP.(simple uri ~req:Post ~parser:Fn.ignore ~body) >>=? fun () ->
-    let wait = (wait_for_passing t.consul [(service, Time.Span.of_int_sec 5)] |> fst >>| function
-      | `Pass -> Ok ()
-      | `Error err -> Error err
-      | `Closed -> assert false) in
-    wait >>=? fun () ->
-    create_session t.consul (sprintf "service:%s" id) >>|?
-    start_advertiser (sprintf "%s/%s" t.prefix id) >>= function
+    let make_service port =
+      let req = { RegisterService.
+                  id = id;
+                  name = "condo";
+                  tags = t.tags;
+                  port = port;
+                  check = { RegisterService.
+                            http = Some (sprintf "http://0.0.0.0:%i/" port);
+                            script = None;
+                            interval = "5s"}} in
+      let body = RegisterService.to_yojson req |> Yojson.Safe.to_string in
+      L.debug "Register itself as %s" id;
+      L.debug "Service config: \n%s" (RegisterService.show req);
+      Utils.HTTP.(simple uri ~req:Post ~parser:Fn.ignore ~body) in
+    server () >>=
+    make_service >>=? fun () ->
+    ((wait_for_passing t.consul [(service, Time.Span.of_int_sec 5)] |> fst >>| function
+       | `Pass -> Ok ()
+       | `Error err -> Error err
+       | `Closed -> assert false) >>=? fun () ->
+     create_session t.consul (sprintf "service:%s" id) >>|?
+     start_advertiser (sprintf "%s/%s" t.prefix id)) >>= function
     | Ok () -> Ok (w, stopper) |> return
     | Error err -> stopper () >>| fun () -> Error err
 end
