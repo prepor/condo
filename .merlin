@@ -1,6 +1,9 @@
-PKG yojson core ppx_import ppx_deriving.std ppx_deriving_yojson async cohttp cohttp.async cmdliner mustache
+PKG yojson core ppx_import ppx_deriving.std ppx_deriving_yojson async cohttp cohttp.async cmdliner mustache dispatch
 
 S src
 B _build/src
+
+S monitoring
+B _build/monitoring
 
 CMT /Users/prepor/.opam/system/build/yojson.1.2.3/

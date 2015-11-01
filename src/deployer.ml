@@ -8,7 +8,6 @@ type deploy = {
   stop_checks: (unit -> unit);
   stop_discoveries: (unit -> unit Deferred.t);
   stop_supervisor: (unit -> unit) option;
-  stable: bool;
   created_at: float;
   stable_at: float option;
 }
@@ -185,7 +184,6 @@ let new_spec' t state spec discoveries_stopper =
                             stop_checks = stable_watcher t container services;
                             stop_discoveries = discoveries_stopper;
                             stop_supervisor = None;
-                            stable = false;
                             created_at = now ();
                             stable_at = None; } in
              let state'' = if spec.Spec.stop_before
@@ -240,7 +238,8 @@ let supervisor_watcher t supervisor deploy =
 let now_stable t state container =
   let (supervisor, stop_supervisor) = Docker.supervisor t.docker container in
   let new_state next =
-    let deploy = { next with stop_supervisor = Some stop_supervisor} in
+    let deploy = { next with stop_supervisor = Some stop_supervisor;
+                             stable_at = Some (now ())} in
     supervisor_watcher t supervisor deploy |> don't_wait_for;
     return { current = Some deploy;
              next = None;
@@ -296,31 +295,14 @@ let container_down t state deploy =
   let state' = { state with current = None} in
   try_again t state' deploy.spec
 
-module SerializedState = struct
-  module Deploy = struct
-    type t = {
-      image: string
-    } [@@deriving yojson, show]
-  end
-  type t = {
-    current: Deploy.t option;
-    next: Deploy.t option;
-    last_stable: string option;
-  } [@@deriving yojson, show]
-end
-
 let serialize_state state =
-  let spec_to_image {Spec.image} =
-    let {Spec.Image.name; tag} = image in
-    sprintf "%s:%s" name tag in
-  let serialize_deploy = Option.map ~f:(fun {spec} ->
-      {SerializedState.Deploy.image = spec_to_image spec}) in
-  {SerializedState.
+  let serialize_deploy = Option.map ~f:(fun {spec; created_at; stable_at} ->
+      {Json.SerializedState.Deploy.image = spec.Spec.image; created_at; stable_at}) in
+  {Json.SerializedState.
     current = serialize_deploy state.current;
     next = serialize_deploy state.next;
-    last_stable = Option.map state.last_stable spec_to_image}
-  |> SerializedState.to_yojson |> Yojson.Safe.to_string
-
+    last_stable = Option.map state.last_stable (fun {Spec.image} -> image)}
+  |> Json.SerializedState.to_yojson |> Yojson.Safe.to_string
 
 let apply_change t state change =
   (match change with
@@ -329,9 +311,10 @@ let apply_change t state change =
    | NowStable container -> now_stable t state container
    | NotStable container -> not_stable t state container
    | TryAgain spec -> try_again t state spec
-   | ContainerDown deploy -> container_down t state deploy) >>| fun state' ->
-  Option.iter t.advertisements ~f:(fun w ->
-      Pipe.write_without_pushback w (serialize_state state'));
+   | ContainerDown deploy -> container_down t state deploy) >>= fun state' ->
+  (match t.advertisements with
+   | Some w -> Pipe.write w (serialize_state state')
+  | None -> return ()) >>| fun () ->
   state'
 
 let at_shutdown t state =

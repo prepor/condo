@@ -1,7 +1,10 @@
 open Core.Std
 open Async.Std
-open Cohttp
-open Cohttp_async
+
+module HTTP = Cohttp
+module HTTP_A = Cohttp_async
+module Server = Cohttp_async.Server
+module Client = Cohttp_async.Client
 
 module RM = Utils.RunMonitor
 
@@ -44,14 +47,14 @@ let requests_loop parser uri monitor w =
     let do_req () =
       L.debug "Consul watcher %s: do request" (Uri.to_string uri);
       Client.get uri' >>= fun (resp, body) ->
-      match Response.status resp with
-      | #Code.success_status ->
-        (match (index, Header.get resp.Response.headers "x-consul-index") with
+      match HTTP.Response.status resp with
+      | #HTTP.Code.success_status ->
+        (match (index, HTTP.Header.get resp.HTTP.Response.headers "x-consul-index") with
          | (None, None) -> Error `SameIndex |> return
          | (Some index, Some index2) when index = index2 -> Error `SameIndex |> return
          | (Some index, None) -> Error `UnknownIndex |> return
          | (_, Some index2) ->
-           (Body.to_string body) >>| fun body' -> parser body' |> (function
+           (HTTP_A.Body.to_string body) >>| fun body' -> parser body' |> (function
                | Ok parsed -> (match last_res with
                    | Some last_res' when last_res' = parsed -> Error (`SameValue index2)
                    | _ -> Ok (parsed, index2))
@@ -67,6 +70,7 @@ let requests_loop parser uri monitor w =
     if RM.is_running monitor then
       let try_again () = Time.Span.of_int_sec 2 |> after >>= fun _ -> loop last_res index in
       let uri_s = (Uri.to_string uri) in
+      (* Gc.full_major (); *)
       get_key last_res index >>= function
       | `Key (res, index') ->
         guarded_write res >>= fun () ->
@@ -109,6 +113,31 @@ let discovery t ?tag (Service.Name service) =
     | Some v -> Uri.add_query_param' uri ("tag", v)
     | None -> uri in
   Uri.with_query uri' [("raw", [])] |> watch_uri t parse_discovery_body
+
+module CatalogService = struct
+  type t = {
+    id : string [@key "ServiceID"];
+    address : string [@key "Address"];
+    node : string [@key "Node"];
+    port : int [@key "ServicePort"];
+    tags : string list [@key "ServiceTags"];
+  } [@@deriving yojson { strict = false }, show]
+
+  type t_list = t list [@@deriving yojson, show]
+end
+
+let parse_catalog_service body =
+  let body' = Yojson.Safe.from_string body in
+  match CatalogService.t_list_of_yojson body' with
+  | `Ok v -> v
+             |> List.map ~f:(function {CatalogService.id} as s -> (id, s))
+             |> String.Map.of_alist_exn
+             |> Result.return
+  | `Error err -> Error err
+
+let catalog_service t service =
+  let uri = make_uri t ("/v1/catalog/service/" ^ service) in
+  watch_uri t parse_catalog_service uri
 
 module RegisterService = struct
   type check = {
@@ -182,11 +211,11 @@ let create_session t check =
   Utils.HTTP.(simple uri ~body ~req:Put ~parser)
 
 let put t ?session ~path ~body =
-  let uri = make_uri t (sprintf "/v1/kv/%s" path) in
+  let uri = make_uri t (sprintf "/v1/kv%s" path) in
   let uri' = match session with
     | Some v -> Uri.add_query_param' uri ("acquire", v)
     | None -> uri in
-  Utils.HTTP.(simple uri' ~body ~req:Put ~parser: (fun _ -> ()))
+  Utils.HTTP.(simple uri' ~body ~req:Put ~parser: (fun s -> ()))
 
 let parse_checks_body id body =
   let open Yojson.Basic.Util in
@@ -207,7 +236,7 @@ let wait_for_passing_loop t (Service.ID service_id) timeout is_running =
     if !is_running then
       (try_with (fun _ -> Client.get uri) >>=?
        Utils.HTTP.not_200_as_error >>=? fun (resp, body) ->
-       try_with (fun _ -> Body.to_string body) >>=? fun body' ->
+       try_with (fun _ -> HTTP_A.Body.to_string body) >>=? fun body' ->
        parse_checks_body service_id body' |> return  >>=? fun is_passing ->
        if is_passing then Ok () |> return
        else Error (Failure "Service is down") |> return
@@ -260,11 +289,14 @@ module Advertiser = struct
   let start t =
     let (r, w) = Pipe.create () in
     let start_advertiser path session =
-      Pipe.iter r ~f:(fun body ->
-          put t.consul ~path ~session ~body >>| function
-          | Ok () -> ()
-          | Error err -> L.error "Logging while putting advertising value: %s" (Utils.of_exn err);)
-      |> don't_wait_for in
+      let loop () =
+        Pipe.iter r ~f:(fun body ->
+            put t.consul ~path ~body ?session:None >>| function
+            | Ok () -> ()
+            | Error err -> L.error "Logging while putting advertising value: %s" (Utils.of_exn err);)
+        |> don't_wait_for in
+      put t.consul ~path ~session ~body:"" >>=? fun () ->
+      loop (); return (Ok ()) in
     let uri = make_uri t.consul "/v1/agent/service/register" in
     let id = "condo_" ^ Utils.random_str 10 in
     let service = (Service.ID id) in
@@ -285,12 +317,12 @@ module Advertiser = struct
       Utils.HTTP.(simple uri ~req:Post ~parser:Fn.ignore ~body) in
     server () >>=
     make_service >>=? fun () ->
-    ((wait_for_passing t.consul [(service, Time.Span.of_int_sec 5)] |> fst >>| function
+    ((wait_for_passing t.consul [(service, Time.Span.of_int_sec 15)] |> fst >>| function
        | `Pass -> Ok ()
        | `Error err -> Error err
        | `Closed -> assert false) >>=? fun () ->
-     create_session t.consul (sprintf "service:%s" id) >>|?
-     start_advertiser (sprintf "%s/%s" t.prefix id)) >>= function
+     create_session t.consul (sprintf "service:%s" id) >>=?
+     start_advertiser (sprintf "/%s/%s" t.prefix id)) >>= function
     | Ok () -> Ok (w, stopper) |> return
     | Error err -> stopper () >>| fun () -> Error err
 end
