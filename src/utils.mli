@@ -43,3 +43,5 @@ val of_exn : Exn.t -> string
 val random_str : int -> string
 
 val exn_to_string : exn -> string
+
+val yojson_to_result : [`Error of string | `Ok of 'a] -> ('a, exn) Result.t

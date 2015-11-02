@@ -19,6 +19,10 @@ let random_str length =
 
 let exn_to_string exn = exn |> sexp_of_exn |> Sexp.to_string_hum
 
+let yojson_to_result = function
+    | `Ok v -> Ok v
+    | `Error s -> Error (Failure s)
+
 module Deferred = struct
   let all_or_error' deferreds =
     Deferred.all deferreds >>| fun results ->

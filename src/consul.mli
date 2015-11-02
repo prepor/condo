@@ -27,7 +27,7 @@ module CatalogService : sig
       tags : string list;}
 end
 
-val catalog_service : t -> string -> CatalogService.t String.Map.t Pipe.Reader.t * (unit -> unit Deferred.t)
+val catalog_service : t -> string -> (string, CatalogService.t) List.Assoc.t Pipe.Reader.t * (unit -> unit Deferred.t)
 
 val register_service : t -> ?id_suffix:string -> Spec.Service.t -> (string * string) list -> int -> (Service.id, exn) Result.t Deferred.t
 

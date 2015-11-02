@@ -111,11 +111,13 @@ module Watcher = struct
 
   let apply_key_value t service value =
     let {Consul.CatalogService.id} = service in
-    Yojson.Safe.from_string value |> Json.SerializedState.of_yojson |> function
-    | `Error err ->
-      L.error "Error while reading state json for service %s: %s" id err;
+    Result.(try_with (fun () -> Yojson.Safe.from_string value) >>= fun v ->
+            Json.SerializedState.of_yojson v |> Utils.yojson_to_result)
+    |> function
+    | Error err ->
+      L.error "Error while reading state json for service %s: %s" id (Utils.of_exn err);
       return t
-    | `Ok state ->
+    | Ok state ->
       let instance' = make_instance service state in
       let snapshot' = String.Map.add t.snapshot ~key:id ~data:instance' in
       let change = (match String.Map.mem t.snapshot id with
@@ -143,7 +145,7 @@ module Watcher = struct
               control_r; control_w;
               snapshot = String.Map.empty;
               key_watchers = []; } in
-    Pipe.transfer services control_w ~f:(fun v -> Services v) |> don't_wait_for;
+    Pipe.transfer services control_w ~f:(fun v -> Services (String.Map.of_alist_exn v)) |> don't_wait_for;
     loop t |> don't_wait_for;
     r
 

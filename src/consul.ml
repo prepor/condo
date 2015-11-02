@@ -131,7 +131,6 @@ let parse_catalog_service body =
   match CatalogService.t_list_of_yojson body' with
   | `Ok v -> v
              |> List.map ~f:(function {CatalogService.id} as s -> (id, s))
-             |> String.Map.of_alist_exn
              |> Result.return
   | `Error err -> Error err
 

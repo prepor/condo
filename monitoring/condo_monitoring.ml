@@ -4,9 +4,9 @@ open Cmdliner
 
 module A = Async.Std
 
-let start monitoring port =
+let start monitoring port ui_path =
   Random.self_init ();
-  Monitoring_server.create monitoring port |> A.don't_wait_for;
+  Monitoring_server.create monitoring port ui_path |> A.don't_wait_for;
   (* FIXME host of deployer should be customizable *)
   never_returns (A.Scheduler.go ())
 
@@ -46,6 +46,11 @@ let port =
   let doc = "Port for listening" in
   Arg.(value & opt int 5000 & info ["p"; "port"] ~doc ~docv:"PORT")
 
+let ui_prefix =
+  let doc = "Directory with UI files" in
+  let env = Arg.env_var "UI_PREFIX" ~doc in
+  Arg.(value & opt (some string) None & info ["ui-prefix"] ~doc ~env ~docv:"DIR_PATH")
+
 let debug =
   let doc = "Debug logs" in
   Arg.(value & flag & info ["d"; "debug"] ~doc)
@@ -53,6 +58,6 @@ let debug =
 let setup_log =
   Term.(const setup_log' $ debug)
 
-let condo_t = Term.(const start $ monitoring $ port $ setup_log)
+let condo_t = Term.(const start $ monitoring $ port $ ui_prefix $ setup_log)
 
 let () = match Term.eval (condo_t, info)  with `Error _ -> exit 1 | _ -> exit 0

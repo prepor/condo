@@ -1,0 +1,4 @@
+resources/public/out
+resources/public/static/cljs
+target
+figwheel_server.log

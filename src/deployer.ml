@@ -64,12 +64,12 @@ let stop t = function
   | Some deploy -> stop' t deploy
   | None -> return ()
 
-let stop_if_needed t state stop_before =
+let stop_if_needed t state stop_strategy =
   let stop_next_if_need state =
     stop t state.next >>= fun _ ->
     return { state with next = None } in
-  let stop_current_if_need state = match (state.current, stop_before) with
-    | (Some deploy, true) -> stop t state.current >>= fun _ ->
+  let stop_current_if_need state = match (state.current, stop_strategy) with
+    | (Some deploy, Spec.Before) -> stop t state.current >>= fun _ ->
       return { state with next = None }
     | _ -> return state in
   stop_next_if_need state >>= stop_current_if_need
@@ -171,7 +171,7 @@ let merge_envs_to_spec spec envs =
                      |> assoc_to_envs }
 
 let new_spec' t state spec discoveries_stopper =
-  stop_if_needed t state spec.Spec.stop_before >>= fun state' ->
+  stop_if_needed t state spec.Spec.stop >>= fun state' ->
   L.info "Starting container for %s" (spec_label spec);
   (Docker.start t.docker spec >>=? (fun (container, ports) ->
        register_services t spec container ports >>= (function
@@ -186,9 +186,9 @@ let new_spec' t state spec discoveries_stopper =
                             stop_supervisor = None;
                             created_at = now ();
                             stable_at = None; } in
-             let state'' = if spec.Spec.stop_before
-               then { state' with current = Some deploy }
-               else { state' with next = Some deploy } in
+             let state'' = match spec.Spec.stop with
+               | Spec.Before -> { state' with current = Some deploy }
+               | Spec.After _ -> { state' with next = Some deploy } in
              Ok state'' |> return)) >>= function
    | Ok v -> return v
    | Error err ->
@@ -247,13 +247,19 @@ let now_stable t state container =
   match state with
   | { current = Some current_deploy;
       next = Some next_deploy; } ->
-    let timeout = current_deploy.spec.Spec.stop_after_timeout in
-    L.info "New stable container %s for deploy %s. Stop %s after %i seconds"
-      (Docker.container_to_string container) (spec_label next_deploy.spec) (spec_label current_deploy.spec)
-      timeout;
-    stop' t ~timeout current_deploy >>= fun _ ->
-    new_state next_deploy
+    (match current_deploy.spec.Spec.stop with
+     | Spec.Before -> assert false
+     | Spec.After timeout ->
+       L.info "New stable container %s for deploy %s. Stop %s after %i seconds"
+         (Docker.container_to_string container) (spec_label next_deploy.spec) (spec_label current_deploy.spec)
+         timeout;
+       stop' t ~timeout current_deploy >>= fun _ ->
+       new_state next_deploy)
   | { next = Some next_deploy } ->
+    L.info "New stable container %s for deploy %s"
+      (Docker.container_to_string container) (spec_label next_deploy.spec);
+    new_state next_deploy
+  | { current = Some next_deploy } ->
     L.info "New stable container %s for deploy %s"
       (Docker.container_to_string container) (spec_label next_deploy.spec);
     new_state next_deploy
@@ -314,7 +320,7 @@ let apply_change t state change =
    | ContainerDown deploy -> container_down t state deploy) >>= fun state' ->
   (match t.advertisements with
    | Some w -> Pipe.write w (serialize_state state')
-  | None -> return ()) >>| fun () ->
+   | None -> return ()) >>| fun () ->
   state'
 
 let at_shutdown t state =

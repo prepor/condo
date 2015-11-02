@@ -58,6 +58,8 @@ module Service = struct
   } [@@deriving yojson, show]
 end
 
+type stop = Before | After of int [@@deriving yojson, show]
+
 type t = {
   image : Image.t;
   discoveries : Discovery.t list [@default []];
@@ -70,8 +72,7 @@ type t = {
   user : string option [@default None];
   privileged : bool [@default false];
   network_mode : string option [@default None];
-  stop_before : bool [@default false];
-  stop_after_timeout : int [@default 10];
   kill_timeout : int option [@default Some 10];
-  logs : Logs.t option [@default None]
+  logs : Logs.t option [@default None];
+  stop : stop [@default Before]
 } [@@deriving yojson, show]
