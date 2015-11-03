@@ -12,26 +12,35 @@
 
 (defn deploy
   [deploy class]
-  (when deploy
-    [:span
-     [:span.label {:class class} (get-in deploy [:image :tag])]
-     [:small.text-muted " " (relative-date/format (* (int (:created_at deploy)) 1000))]]))
+  [:span
+   [:span.label {:class class} (get-in deploy [:image :tag])]
+   [:small.text-muted " " (relative-date/format (* (int (:created_at deploy)) 1000))]])
+
+(defn instance-state
+  [state]
+  (case (first state)
+    "Init" [:span.label.label-default "Initializing"]
+    "Waiting" (let [[_ d] state] (deploy d "label-warning"))
+    "WaitingNext" (let [[_ current next] state]
+                    [:div
+                     (deploy current "label-success")
+                     [:br]
+                     (deploy next "label-warning")])
+    "Started" (let [[_ d] state] (deploy d "label-success"))
+    "Stopped" [:span.label.label-default "Stopped"]))
 
 (defn instance
   [instance]
   ^{:key (:id instance)}
   [:div.card.card-block {:style {:width "30rem" :margin-right "1rem"}}
    [:h5.card-title (:node instance)]
-   [:p.card-text
-    (deploy (get-in instance [:state :current]) "label-success")
-    [:br]
-    (deploy (get-in instance [:state :next]) "label-warning")]])
+   [:p.card-text (instance-state (:state instance))]])
 
 (defn group
   [group]
-  ^{:key (get-in group [:group :name])}
+  ^{:key (:label group)}
   [:div
-   [:h4 (get-in group [:group :name])]
+   [:h4 (:label group)]
    [:div {:style {:display "flex" :flex-wrap "wrap"}}
     (map instance (:instances group))]])
 
@@ -61,14 +70,23 @@
 (defn render []
   (r/render-component [ui] (.getElementById js/document "main")))
 
+(defn instance-group
+  [instance]
+  (let [state (:state instance)]
+    (case (first state)
+      "Init" "Initializing"
+      "Waiting" (let [[_ d] state] (get-in d [:image :name]))
+      "WaitingNext" (let [[_ current next] state] (get-in current [:image :name]))
+      "Started" (let [[_ d] state] (get-in d [:image :name]))
+      "Stopped" "Stopping")))
+
 (defn with-group
   [instance]
-  (assoc instance :group {:name (or (get-in instance [:state :current :image :name])
-                                    (get-in instance [:state :next :image :name]))}))
+  (assoc instance :group (instance-group instance)))
 
 (defn as-group
   [[g instances]]
-  {:group g
+  {:label g
    :instances (map #(dissoc % :group) instances)})
 
 (defn start-receiver

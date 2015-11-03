@@ -10,7 +10,7 @@ module Instance : sig
     address : string;
     port : int;
     tags : string list;
-    state : Json.SerializedState.t;
+    state : Yojson.Safe.json;
   }
 
   val to_yojson : t -> Yojson.Safe.json

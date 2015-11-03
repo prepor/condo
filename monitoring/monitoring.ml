@@ -8,7 +8,7 @@ module Instance = struct
     address : string;
     port : int;
     tags : string list;
-    state : Json.SerializedState.t;
+    state : Yojson.Safe.json;
   } [@@deriving yojson]
 end
 
@@ -111,9 +111,7 @@ module Watcher = struct
 
   let apply_key_value t service value =
     let {Consul.CatalogService.id} = service in
-    Result.(try_with (fun () -> Yojson.Safe.from_string value) >>= fun v ->
-            Json.SerializedState.of_yojson v |> Utils.yojson_to_result)
-    |> function
+    Result.try_with (fun () -> Yojson.Safe.from_string value) |> return >>= function
     | Error err ->
       L.error "Error while reading state json for service %s: %s" id (Utils.of_exn err);
       return t

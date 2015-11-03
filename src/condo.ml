@@ -7,13 +7,9 @@ module A = Async.Std
 let start docker consul endpoint advertiser =
   Random.self_init ();
   (* FIXME host of deployer should be customizable *)
-  let deployer = Deployer.create ~consul ~docker
-      ~host:(Docker.host docker) ~spec:endpoint ?advertiser in
-  let at_shutdown _s =
-    A.Deferred.map
-      (deployer ())
-      (fun () -> A.Shutdown.shutdown 0)
-    |> A.don't_wait_for in
+  Deployer.start ~consul ~docker
+      ~host:(Docker.host docker) ~spec:endpoint ?advertiser;
+  let at_shutdown _s = A.Shutdown.shutdown 0 in
   A.Signal.handle A.Signal.terminating ~f:at_shutdown;
   never_returns (A.Scheduler.go ())
 
