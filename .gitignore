@@ -7,3 +7,5 @@
 /src/META*
 /src/condo.mldylib*
 /src/condo.mllib*
+/opam/
+/release/

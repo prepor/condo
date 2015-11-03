@@ -1,5 +1,5 @@
 Name: condo
-Version: 0.1
+Version: 0.7
 Synopsis: A library about consul and docker
 Authors: Me <me@myhost.com>
 License: LGPL with OCaml linking exception
@@ -15,22 +15,23 @@ Library condo
   Modules: Deployer, Docker, Consul
   InternalModules: Spec, Utils, L
   BuildDepends:
-    async,yojson,core,ppx_deriving.std,ppx_deriving_yojson,cohttp,cohttp.async,threads,
+    async,yojson,core,ppx_deriving.std(>= 3.0),ppx_deriving_yojson(>= 2.3),cohttp,cohttp.async,threads,
     mustache
 
 Library condo_monitoring
   Path: monitoring
   Modules: Monitoring, Monitoring_server
-  BuildDepends: condo, dispatch
+  BuildDepends: condo, dispatch,ppx_getenv
 
 Executable condo
   Path: src
   MainIs: condo.ml
   CompiledObject: best
-  BuildDepends: condo, cmdliner
+  BuildDepends: condo, cmdliner,ppx_getenv
   
 Executable condo_monitoring
   Path: monitoring
   MainIs: condo_monitoring.ml
+  CompiledObject: best
   BuildDepends: condo_monitoring, cmdliner
   

@@ -27,7 +27,7 @@ let endpoint =
 
 let info =
   let doc = "Good daddy for docker containers" in
-  Term.info "condo" ~version:"%VERSION%" ~doc
+  Term.info "condo" ~version:[%getenv "VERSION"] ~doc
 
 let setup_log' is_debug =
   let level = if is_debug then "Debug" else "Info" in
