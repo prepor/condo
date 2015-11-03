@@ -52,7 +52,7 @@ let stop t container =
   L.debug "Stop container %s" container';
   let uri = make_uri t Spec.Image.(sprintf "/containers/%s/stop" container') in
   Utils.HTTP.(simple uri ~req:Post
-    ~parser: (fun v -> ()))
+                ~parser: (fun v -> ()))
 
 
 module CreateContainer = struct
@@ -85,7 +85,11 @@ end
 let service_to_protocol s = Spec.Service.(if s.udp then "udp" else "tcp")
 
 let create_container t spec image_id =
-  let params = match spec.Spec.name with Some v -> [("name", v)] | None -> [] in
+  let params = match spec.Spec.name with
+    (* docker can't work properly with containers with same names (even with
+       renaming) see https://github.com/docker/docker/issues/15727 *)
+    | Some v -> [("name", v ^ "_" ^ (Utils.random_str 10))]
+    | None -> [] in
   let uri = make_uri t ~query_params:params "/containers/create"  in
   let make_env e = Spec.Env.(sprintf "%s=%s" e.name e.value) in
   let make_port s = Spec.Service.(sprintf "%i/%s" s.port (service_to_protocol s)) in
@@ -122,8 +126,9 @@ let rename_old_container t spec =
   match spec.Spec.name with
   | None -> Ok () |> return
   | Some n ->
-    let new_name = Utils.random_str 10 in
-    let uri = make_uri t (sprintf "/containers/%s/rename?name=%s" n new_name) in
+    let new_name = n ^ "_" ^ (Utils.random_str 10) in
+    let uri = make_uri t (sprintf "/containers/%s/rename" n)
+              |> fun uri -> Uri.add_query_param' uri ("name", new_name) in
     Utils.HTTP.(simple uri ~req:Post
                   ~parser: (fun _ -> ())) >>| function
     | Error err ->
@@ -150,15 +155,14 @@ let receive_mapping t spec container =
       (s.Spec.Service.port, to_) in
   Utils.HTTP.(simple uri ~parser: (fun v -> List.map spec.Spec.services (parse_service v)))
 
-(* val start : t -> Spec.t -> ((container * (int * int) list), exn) Result.t Deferred.t *)
 let start t spec =
   let i = spec.Spec.image in
   pull_image t i >>=? fun () ->
-  receive_image_id t i >>=?
-  create_container t spec >>=? fun container ->
+  receive_image_id t i >>=? fun image_id ->
+  (* rename_old_container t spec >>= fun _ -> *)
+  create_container t spec image_id >>=? fun container ->
   let container' = Id container in
-  (rename_old_container t spec >>=? fun () ->
-   start_container t spec container >>=? fun () ->
+  (start_container t spec container >>=? fun () ->
    receive_mapping t spec container) >>= function
   | Ok mapping -> Ok (container', mapping) |> return
   | Error err -> (stop t container' >>= fun _ -> Error err |> return )
