@@ -1,14 +1,10 @@
 FROM prepor/ocaml:4.02.3
 
-ADD opam /opt/opam
-ADD _oasis /opt/opam/_oasis
-WORKDIR /opt/opam
-
-RUN eval `opam config env` && opam pin add -y condo-deps .
+RUN eval `opam config env` && \
+    opam install async yojson core 'ppx_deriving>=3.0' 'ppx_deriving_yojson>=2.3' cohttp \
+    mustache dispatch ppx_getenv
 
 ADD . /opt/condo
 WORKDIR /opt/condo
 
-CMD bash -c 'eval `opam config env` && opam pin add -y condo . && ./configure && make'
-
-
+CMD bash -c 'eval `opam config env` && oasis setup -setup-update dynamic && ./configure && make'

@@ -4,8 +4,12 @@
 /condo.native
 /condo_monitoring.byte
 /_build/
-/src/META*
+/src/META
 /src/condo.mldylib*
 /src/condo.mllib*
 /opam/
 /release/
+
+/Makefile
+/configure
+

@@ -21,7 +21,7 @@ Library condo
 Library condo_monitoring
   Path: monitoring
   Modules: Monitoring, Monitoring_server
-  BuildDepends: condo, dispatch,ppx_getenv
+  BuildDepends: condo,dispatch,ppx_getenv
 
 Executable condo
   Path: src

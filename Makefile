@@ -41,4 +41,6 @@ configure:
 # OASIS_STOP
 
 release:
-  ./build/build.sh
+	./build/build.sh
+
+.PHONY: release
