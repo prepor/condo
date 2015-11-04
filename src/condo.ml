@@ -4,7 +4,7 @@ open Cmdliner
 
 module A = Async.Std
 
-let start docker consul endpoint advertiser =
+let start docker endpoint (consul, advertiser) =
   Random.self_init ();
   (* FIXME host of deployer should be customizable *)
   Deployer.start ~consul ~docker
@@ -66,6 +66,7 @@ let advertise =
     let doc = "KV's prefix in which condo will stores it's state if advertising" in
     Arg.(value & opt string "condo" & info ["prefix"] ~doc ~docv:"PREFIX") in
   let advertise' is_start tags prefix consul =
+    consul,
     (match is_start with
      | true ->
        Some (Consul.Advertiser.create consul ~tags ~prefix)
@@ -76,6 +77,6 @@ let advertise =
 let setup_log =
   Term.(const setup_log' $ debug)
 
-let condo_t = Term.(const start $ docker $ consul $ endpoint $ advertise $ setup_log)
+let condo_t = Term.(const start $ docker $ endpoint $ advertise $ setup_log)
 
 let () = match Term.eval (condo_t, info)  with `Error _ -> exit 1 | _ -> exit 0
