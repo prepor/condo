@@ -23,15 +23,15 @@ end
 
 module Volume = struct
   type t = {
-    from : string [@key "From"];
-    to_ : string [@key "To"];
+    from : string;
+    to_ : string [@key "to"];
   } [@@deriving yojson, show]
 end
 
 module Logs = struct
   type t = {
     log_type : string [@key "type"];
-    config : Yojson.Safe.json option [@key "config"] [@default None] [@opaque];
+    config : Yojson.Safe.json option [@default None] [@opaque];
   } [@@deriving yojson, show]
 end
 
