@@ -31,7 +31,7 @@ end
 module Logs = struct
   type t = {
     log_type : string [@key "type"];
-    config : Yojson.Safe.json option [@key "Config"] [@default None] [@opaque];
+    config : Yojson.Safe.json option [@key "config"] [@default None] [@opaque];
   } [@@deriving yojson, show]
 end
 
