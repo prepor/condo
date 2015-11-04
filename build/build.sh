@@ -9,7 +9,7 @@ TAG=`oasis query version`
 SHA=`git rev-parse --short HEAD`
 VERSION="$TAG ($SHA)"
 
-git tag $TAG || true
+git tag -f $TAG
 git push -f origin $TAG
 
 docker build -t condo:$TAG ./
