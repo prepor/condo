@@ -9,7 +9,5 @@
 /src/condo.mllib*
 /opam/
 /release/
-
-/Makefile
-/configure
+/monitoring-ui/out/
 

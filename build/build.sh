@@ -33,7 +33,7 @@ cp resources/public/static/index.html out/
 popd
 
 cp -r monitoring-ui/out release/ui
-tar -zcvf release/ui_${TAG}.tar.gz release/ui
+tar -zcvf release/ui_${TAG}.tar.gz -C release/ui .
 
 git show -s --format=%s%b > .release_notes
 hub release create \
