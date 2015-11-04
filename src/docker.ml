@@ -95,8 +95,10 @@ let create_container t spec image_id =
   let make_port s = Spec.Service.(sprintf "%i/%s" s.port (service_to_protocol s)) in
   let make_exposed s = (make_port s, `Assoc []) in
   let make_port_binding s = Spec.Service.(match s.host_port with
-      | Some p -> Some CreateContainer.PortBinding.(make_port s,
-                                                    { host_port = string_of_int p} |> to_yojson)
+      | Some p ->
+        let (k, v) = CreateContainer.PortBinding.(make_port s,
+                                                   { host_port = string_of_int p} |> to_yojson) in
+        Some (k, (`List [v]))
       | None -> None) in
   let make_bind v = Spec.Volume.(sprintf "%s:%s" v.from v.to_) in
   let port_bindings = `Assoc (List.filter_map spec.Spec.services make_port_binding) in
@@ -116,7 +118,7 @@ let create_container t spec image_id =
                      exposed_ports = `Assoc (List.map spec.services make_exposed);
                      host_config = host_config; }) in
   let body' = body |> CreateContainer.to_yojson |> Yojson.Safe.to_string in
-  L.debug "Container config:\n%s" (CreateContainer.show body);
+  L.debug "Container config:\n%s" body';
   Utils.HTTP.(simple uri ~req:Post ~body:body'
                 ~headers: (Cohttp.Header.init_with "Content-Type" "application/json")
                 ~parser: (fun v -> Yojson.Basic.Util.(v |> member "Id" |> to_string)))
