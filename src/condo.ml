@@ -8,8 +8,10 @@ let start docker endpoint (consul, advertiser) =
   Random.self_init ();
   (* FIXME host of deployer should be customizable *)
   Deployer.start ~consul ~docker
-      ~host:(Docker.host docker) ~spec:endpoint ?advertiser;
-  let at_shutdown _s = A.Shutdown.shutdown 0 in
+    ~host:(Docker.host docker) ~spec:endpoint ?advertiser;
+  (* 30 min? it should be configurable or we should excplicit about it in
+     documentation *)
+  let at_shutdown _s = A.Shutdown.shutdown ~force:(A.after (Time.Span.of_min 30.0)) 0 in
   A.Signal.handle A.Signal.terminating ~f:at_shutdown;
   never_returns (A.Scheduler.go ())
 
