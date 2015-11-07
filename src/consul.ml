@@ -120,7 +120,7 @@ let discovery t ?tag (Service.Name service) =
   let uri' = match tag with
     | Some v -> Uri.add_query_param' uri ("tag", v)
     | None -> uri in
-  Uri.with_query uri' [("raw", [])] |> watch_uri t parse_discovery_body
+  Uri.with_query uri' [("passing", [])] |> watch_uri t parse_discovery_body
 
 module CatalogService = struct
   type t = {
@@ -278,7 +278,10 @@ module Advertiser = struct
   let create consul ~tags ~prefix = { consul; tags; prefix }
 
   let server () =
-    let callback ~body _a _req =
+    let callback ~body _a req =
+      if (Uri.path req.HTTP.Request.uri) = "/gc" then
+        (print_endline "Gc!";
+         Gc.full_major ());
       Server.respond_with_string ~code:`OK "Condo is alive!\n" in
     let port_waiter = Ivar.create () in
     let where_to_listen =
