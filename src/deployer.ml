@@ -299,8 +299,7 @@ let waiting_next_stable t current next =
     | Spec.Before -> 0 in
   L.info "Next deploy %s now is stable. We'll stop previous %s after %i seconds"
     (spec_label next.spec) (spec_label current.spec) timeout;
-  after (Time.Span.of_int_sec timeout) >>= fun () ->
-  stop t current >>= fun () ->
+  stop t ~timeout:timeout current >>= fun () ->
   let next' = at_stable t next in
   Started next' |> return
 
