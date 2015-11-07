@@ -45,10 +45,12 @@ end
 module HTTP = struct
   exception BadStatus of Cohttp.Code.status_code
   let not_200_as_error (resp, body) =
-    let r = match Cohttp.Response.status resp with
-      | #Cohttp.Code.success_status -> Ok (resp, body)
-      | status -> Error (BadStatus status) in
-    return r
+    match Cohttp.Response.status resp with
+      | #Cohttp.Code.success_status -> Ok (resp, body) |> return
+      | status ->
+        Cohttp_async.Body.to_string body |> A.Deferred.ignore >>= fun () ->
+        Error (BadStatus status) |> return
+        Cohttp_async.Body.
 
   type http_method = Get | Post | Delete | Put
 

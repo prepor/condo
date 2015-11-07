@@ -47,12 +47,19 @@ let requests_loop parser uri monitor w =
     let do_req () =
       L.debug "Consul watcher %s: do request" (Uri.to_string uri);
       Client.get uri' >>= fun (resp, body) ->
+      let ignore_read () = (HTTP_A.Body.to_string body) |> Deferred.ignore in
       match HTTP.Response.status resp with
       | #HTTP.Code.success_status ->
         (match (index, HTTP.Header.get resp.HTTP.Response.headers "x-consul-index") with
-         | (None, None) -> Error `SameIndex |> return
-         | (Some index, Some index2) when index = index2 -> Error `SameIndex |> return
-         | (Some index, None) -> Error `UnknownIndex |> return
+         | (None, None) ->
+           ignore_read () >>| fun () ->
+           Error `SameIndex
+         | (Some index, Some index2) when index = index2 ->
+           ignore_read () >>| fun () ->
+           Error `SameIndex
+         | (Some index, None) ->
+           ignore_read () >>| fun () ->
+           Error `UnknownIndex
          | (_, Some index2) ->
            (HTTP_A.Body.to_string body) >>| fun body' -> parser body' |> (function
                | Ok parsed -> (match last_res with
@@ -60,7 +67,8 @@ let requests_loop parser uri monitor w =
                    | _ -> Ok (parsed, index2))
                | Error error -> Error (`ParsingError (index2, error))))
       | status ->
-        Error (`BadStatus status) |> return in
+        ignore_read () >>| fun () ->
+        Error (`BadStatus status) in
     try_with ~extract_exn:true do_req >>= function
     | Ok (Ok v) -> `Key v |> return
     | Ok (Error v) -> return v
