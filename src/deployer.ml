@@ -36,7 +36,7 @@ type event = NewSpec of Spec.t
            | NotStable
            | TryAgain of Spec.t
            | Down
-           | Stop
+           | Stop [@@deriving yojson]
 
 type t = {
   docker: Docker.t;
@@ -349,19 +349,22 @@ let started_stop t deploy =
 
 let started_down = failed_deploy
 
+let unexpected state e =
+  L.error "Unexpected event in % state:\n%s" state (event_to_yojson e |> Yojson.Safe.to_string)
+
 let apply t = function
   | Init -> (function
       | NewSpec spec -> init_new_spec t spec
       | TryAgain spec -> init_try_again t spec
       | Stop -> return Stopped
-      | _ -> assert false)
+      | e -> unexpected "Init" e; Init |> return)
   | Waiting deploy -> (function
       | NewSpec spec -> waiting_new_spec t deploy spec
       | TryAgain spec -> Waiting deploy |> return
       | Stop -> waiting_stop t deploy
       | Stable -> waiting_stable t deploy
       | NotStable -> waiting_not_stable t deploy
-      | _ -> assert false)
+      | e -> unexpected "Waiting" e; Waiting deploy |> return)
   | WaitingNext (current, next) -> (function
       | NewSpec spec -> (match spec.Spec.stop with
           | Spec.Before -> waiting_next_new_spec_before t current next spec
@@ -382,8 +385,8 @@ let apply t = function
           | Spec.Before -> started_new_discovery_before t deploy (d_spec, discoveries)
           | Spec.After _ -> started_new_discovery_after t deploy (d_spec, discoveries))
       | Down -> started_down t deploy
-      | _ -> assert false)
-  | Stopped -> (fun _ -> assert false)
+      | e -> unexpected "Started" e; Started deploy |> return)
+  | Stopped -> (fun e -> unexpected "Stopped" e; Stopped |> return)
 
 let spec_watcher t spec_url =
   let (changes, _close) = Consul.key t.consul spec_url in
