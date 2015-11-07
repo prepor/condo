@@ -50,7 +50,6 @@ module HTTP = struct
       | status ->
         Cohttp_async.Body.to_string body |> A.Deferred.ignore >>= fun () ->
         Error (BadStatus status) |> return
-        Cohttp_async.Body.
 
   type http_method = Get | Post | Delete | Put
 
