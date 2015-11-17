@@ -76,7 +76,7 @@ let requests_loop parser uri monitor w =
 
   let rec loop last_res index =
     if RM.is_running monitor then
-      let try_again () = Time.Span.of_int_sec 2 |> after >>= fun _ -> loop last_res index in
+      let try_again () = Time.Span.of_int_sec 2 |> after >>= fun () -> loop last_res index in
       let uri_s = (Uri.to_string uri) in
       (* Gc.full_major (); *)
       get_key last_res index >>= function
