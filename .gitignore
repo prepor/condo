@@ -10,4 +10,10 @@
 /opam/
 /release/
 /monitoring-ui/out/
-
+.DS_Store
+META.ba0
+META.bak
+_tags.bak
+_tags.ba0
+/.release_notes
+/condo_monitoring.native
