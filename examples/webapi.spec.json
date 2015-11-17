@@ -1,0 +1,79 @@
+{
+    // Setup environment variables
+    "envs": [
+        {
+            "name": "ENVIRONMENT_PATH",
+            "value": "config/production.clj"
+        }
+    ],
+    // Specify image name and tag to be pulled
+    "image": {
+        "name": "docker.hub.example.com:5000/example-app",
+        "tag": "v1.1"
+    },
+    // Services provided by application. They are to be registered in Consul to
+    // be available for service discovery.
+    "services": [
+        {
+            // Health check.
+            // See https://www.consul.io/intro/getting-started/checks.html .
+            // Also used after deploy to make sure newly deployed service is OK.
+            "check": {
+                // Shell command used to check health.
+                // Any non-zero codes treated like errors
+                // Uses Mustache template, available variables for expansion:
+                // {{port}} -- exposed port;
+                // {{container}} -- container Id.
+                // NOTE: avoid using docker exec for health check, as there is
+                // a memory leak: https://github.com/docker/docker/issues/12899
+                "method": ["Scipt", "curl http://localhost:{{port}}"],
+                // Script will be run in this interval in seconds.
+                "interval": 10,
+                // Timeout in seconds for script.
+                "timeout": 120
+            },
+            // Service name for service discovery.
+            "name": "example-app-api",
+            // Port exposed by service.
+            // Use "HostPort", if you want to map it explicitly.
+            "port": 8350,
+            // Array of arbitrary tags.
+            "tags": [
+                "test"
+            ]
+        },
+        // Application can provide several services
+        {
+            "check": {
+                "method": ["HttpPath", "/"],
+                "interval": 10,
+                "timeout": 120
+            },
+            "name": "example-app-admin",
+            "port": 8351,
+            "tags": [
+                "test"
+            ]
+        }
+    ],
+    // List of services application depends on.
+    "discoveries": [
+        {
+            // Service name
+            "service": "redis",
+            // Tag to filter services
+            "tag": "test",
+            // Name of the enviroment varible that will contain service addr
+            // This will be in form host:port or host:port,host:port[,host:port],
+            // if Multiple flag is set.
+            "env": "REDIS",
+            "multiple": true
+        }
+    ],
+    // After deploying new version, Condo will wait for it to pass health check
+    // and specified amount of time (in seconds) before old container will be destroyed.
+    // Use "stop": ["Before"], to stop old container before running new one.
+    // NOTE: "stop": ["Before"] is required if at least one service is using host_port
+    // option.
+    "stop": ["After", 10]
+}
