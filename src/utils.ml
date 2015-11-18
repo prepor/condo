@@ -46,10 +46,11 @@ module HTTP = struct
   exception BadStatus of Cohttp.Code.status_code
   let not_200_as_error (resp, body) =
     match Cohttp.Response.status resp with
-      | #Cohttp.Code.success_status -> Ok (resp, body) |> return
-      | status ->
-        Cohttp_async.Body.to_string body |> A.Deferred.ignore >>= fun () ->
-        Error (BadStatus status) |> return
+    | #Cohttp.Code.success_status -> Ok (resp, body) |> return
+    | `Not_modified -> Ok (resp, body) |> return
+    | status ->
+      Cohttp_async.Body.to_string body |> A.Deferred.ignore >>= fun () ->
+      Error (BadStatus status) |> return
 
   type http_method = Get | Post | Delete | Put
 
@@ -69,9 +70,13 @@ module HTTP = struct
     | Error err ->
       L.error "Request %s failed: %s" (Uri.to_string uri) (of_exn err);
       Error err |> return
-    | Ok (resp, body) -> (match Cohttp.Response.status resp with
-        | `No_content -> parse "{}"
-        | _ -> Cohttp_async.Body.to_string body >>= (fun v -> parse v))
+    | Ok (resp, body) ->
+      L.debug "Request %s success: %s"
+        (Uri.to_string uri) (Cohttp.Response.sexp_of_t resp |> Sexp.to_string_hum);
+      (match Cohttp.Response.status resp with
+       | `Not_modified -> parse "{}"
+       | `No_content -> parse "{}"
+       | _ -> Cohttp_async.Body.to_string body >>= (fun v -> parse v))
 
 end
 
