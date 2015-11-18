@@ -196,8 +196,8 @@ let register_service t ?(id_suffix="") spec template_vars port =
 
 let deregister_service t (Service.ID id) =
   let uri = make_uri t ("/v1/agent/service/deregister/" ^ id) in
-  L.info"Deregister service %s" id;
-  try_with (fun _ -> Client.delete uri) >>|? fun _ -> ()
+  L.info "Deregister service %s" id;
+  try_with (fun _ -> Client.delete uri) >>=? Utils.HTTP.not_200_as_error >>|? fun _ -> ()
 
 module CreateSession = struct
   type t =
