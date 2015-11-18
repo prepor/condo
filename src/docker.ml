@@ -32,9 +32,10 @@ let pull_image t image =
       match StdStream.next stream with
       | exception StdStream.Failure -> Ok ()
       | exception err -> Error err
-      | v -> Yojson.Basic.Util.(match v |> member "Error" |> to_string_option with
+      | v -> Yojson.Basic.Util.(match v |> member "error" |> to_string_option with
           | exception err -> Error err
-          | _ -> check ()) in
+          | Some v -> Error (Failure ("Error while pulling: " ^ v))
+          | None -> check ()) in
     check () in
   let params = Spec.Image.([("fromImage", image.name); ("tag", image.tag)]) in
   let uri = make_uri t ~query_params:params "/images/create" in
