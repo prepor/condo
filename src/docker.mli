@@ -7,7 +7,7 @@ type container = Id of string | Name of string
 
 val container_to_string : container -> string
 
-val create : string -> t
+val create : ?auth_config_file:string -> string -> t
 
 val host : t -> string
 

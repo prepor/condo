@@ -38,6 +38,12 @@ module RunMonitor : sig
   val closer : t -> (unit -> unit Async.Std.Deferred.t)
 end
 
+module Base64 : sig
+  val decode : ?alphabet:string -> string -> string
+
+  val encode : ?pad:bool -> ?alphabet:string -> string -> string
+end
+
 val of_exn : Exn.t -> string
 
 val random_str : int -> string

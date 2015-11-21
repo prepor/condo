@@ -42,8 +42,12 @@ let docker =
     let doc = "Set ups docker API endpoint" in
     let env = Arg.env_var "DOCKER" ~doc in
     Arg.(value & opt string "tcp://0.0.0.0:2376" & info ["docker"] ~env ~doc) in
-  let docker' endpoint = Docker.create endpoint in
-  Term.(const docker' $ endpoint)
+  let auth_file =
+    let doc = "JSON file with auth config for private registries. In the same format as ~/.docker/config.json" in
+    let env = Arg.env_var "DOCKER_AUTH" ~doc in
+    Arg.(value & opt (some string) None & info ["docker-auth"] ~env ~doc ~docv:"FILE_PATH") in
+  let docker' endpoint auth_file = Docker.create ?auth_config_file:auth_file endpoint in
+  Term.(const docker' $ endpoint $ auth_file)
 
 let consul =
   let endpoint =

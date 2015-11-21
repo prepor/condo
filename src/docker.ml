@@ -8,7 +8,10 @@ open Cohttp_async
 module CA = Cohttp_async
 module RM = Utils.RunMonitor
 
-type t = { endpoint: Uri.t }
+type t = {
+  endpoint : Uri.t;
+  auth_config : (string, string) List.Assoc.t option
+}
 
 type container = Id of string | Name of string
 
@@ -16,7 +19,34 @@ let container_to_string = function
   | Id v -> v
   | Name v -> v
 
-let create endpoint = { endpoint = Uri.of_string endpoint }
+module AuthPair = struct
+  type t = {
+    username : string;
+    password : string;
+  } [@@deriving yojson, show]
+end
+
+let load_auth_config_exn config_file =
+  let json_to_base64 json =
+    Yojson.Safe.to_string json |> Utils.Base64.encode in
+  let to_request_format json =
+    let open Yojson.Basic.Util in
+    let auth = json |> member "auth" |> to_string |> Utils.Base64.decode in
+    let parts = String.split auth ~on:':' in
+    let username = List.hd_exn parts in
+    let password = String.concat (List.tl_exn parts) in
+    { AuthPair.username; password } |> AuthPair.to_yojson in
+  let load_auth_config' config_file =
+    let contents = In_channel.read_all config_file in
+    let body = Yojson.Basic.from_string contents in
+    let open Yojson.Basic.Util in
+    body |> member "auths" |> to_assoc
+    |> List.Assoc.map ~f:(Fn.compose json_to_base64 to_request_format) in
+  Option.map ~f:load_auth_config' config_file
+
+let create ?auth_config_file endpoint =
+  { endpoint = Uri.of_string endpoint;
+    auth_config = load_auth_config_exn auth_config_file }
 
 let host t = Uri.host_with_default t.endpoint ~default:""
 
@@ -39,7 +69,14 @@ let pull_image t image =
     check () in
   let params = Spec.Image.([("fromImage", image.name); ("tag", image.tag)]) in
   let uri = make_uri t ~query_params:params "/images/create" in
-  let do_req () = Client.post uri in
+  let headers = Option.(t.auth_config >>= fun auth_config' ->
+                        String.split ~on:'/' image.Spec.Image.name |>
+                        List.hd >>=
+                        List.Assoc.find auth_config' >>| fun v ->
+                        L.debug "Pulling with auth config %s" v;
+                        Cohttp.Header.init_with "X-Registry-Auth" v)
+                |> Option.value ~default: (Cohttp.Header.init ()) in
+  let do_req () = Client.post ~headers uri in
   try_with do_req >>=? Utils.HTTP.not_200_as_error >>=? fun (resp, body) ->
   (CA.Body.to_string body >>| error_checker)
 
@@ -54,7 +91,6 @@ let stop t container =
   let uri = make_uri t Spec.Image.(sprintf "/containers/%s/stop" container') in
   Utils.HTTP.(simple uri ~req:Post
                 ~parser: (fun v -> ()))
-
 
 module CreateContainer = struct
   module PortBinding = struct
@@ -98,7 +134,7 @@ let create_container t spec image_id =
   let make_port_binding s = Spec.Service.(match s.host_port with
       | Some p ->
         let (k, v) = CreateContainer.PortBinding.(make_port s,
-                                                   { host_port = string_of_int p} |> to_yojson) in
+                                                  { host_port = string_of_int p} |> to_yojson) in
         Some (k, (`List [v]))
       | None -> None) in
   let make_bind v = Spec.Volume.(sprintf "%s:%s" v.from v.to_) in

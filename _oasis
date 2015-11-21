@@ -13,7 +13,7 @@ Plugins: META (0.4), DevFiles (0.4)
 Library condo
   Path: src
   Modules: Deployer, Docker, Consul
-  InternalModules: Spec, Utils, L
+  InternalModules: Spec, Utils, Utils_base64, L
   BuildDepends:
     async,yojson,core,ppx_deriving.std(>= 3.0),ppx_deriving_yojson(>= 2.3),cohttp,cohttp.async,threads,
     mustache
