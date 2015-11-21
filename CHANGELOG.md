@@ -2,16 +2,15 @@
 
 FEATURES:
 
-  * Support of private repositories. You can pass --docker-auth argument with
-    path to file in the smae format as ~/.docker/config.json. Auth credentials
+  * Added support for private repositories. You can pass --docker-auth argument with
+    path to file in the same format as ~/.docker/config.json. Auth credentials
     from this file will be used in pull-image requests
 
 BUG FIXES:
 
-  * 304 http responses (in docker stop command for example) could lead to
-    infinity waiting
-  * Pulling error checker fixed
-  * File descriptors leak in service deregistering fixed
+  * Fixed infinity waiting on 304 http responses (e.g. docker stop response)
+  * Fixed incorrect handling of pulling errors
+  * Fixed file descriptor leak in Consul.deregister_service
 
 ## 0.7.1
 
