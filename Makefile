@@ -40,7 +40,7 @@ configure:
 
 # OASIS_STOP
 
-release:
+release: clean
 	./build/build.sh
 
 .PHONY: release
