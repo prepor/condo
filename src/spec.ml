@@ -18,6 +18,7 @@ module Discovery = struct
     tag : string option [@default None];
     multiple : bool [@default false];
     env : string;
+    watch : bool [@default true];
   } [@@deriving yojson, show]
 end
 
