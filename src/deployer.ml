@@ -122,18 +122,27 @@ let discoveries_init t spec =
             | `Ok v -> Ok (spec, v) |> return) in
       tick ())
                       |> Deferred.all >>| partition_result in
-  let closer () = (List.map discoveries' ~f: (fun (_, (_, stopper)) -> stopper ()))
-                  |> Deferred.all >>| (fun _ -> ()) in
+  let make_closer = fun discoveries ->
+    fun () -> discoveries
+              |> List.map ~f: (fun (_, (_, stopper)) -> stopper ())
+              |> Deferred.all >>| fun _ -> () in
+  let (watched, unwatched) = discoveries' |> List.partition_tf ~f: (fun (spec, _) ->
+    if not spec.Spec.Discovery.watch then
+      L.info "Discovery %s won't be watched after initial resolvement" spec.Spec.Discovery.service;
+    spec.Spec.Discovery.watch) in
+  let (watched_closer, unwatched_closer) = (make_closer watched, make_closer unwatched) in
   with_timeout (Time.Span.of_int_sec 10) init_services >>= function
   | `Timeout ->
     L.error "Timeout while resolving discoveries";
-    closer () >>= fun () ->
+    watched_closer () >>= fun () ->
+    unwatched_closer () >>= fun () ->
     Error (Failure "Cant resolve discoveries") |> return
   | `Result (init_discoveries, fails) ->
     if (List.length fails) > 0 then Error (Failure "Discoveries failed") |> return
     else
+      unwatched_closer () >>= fun () ->
       let discoveries_as_envs = List.map init_discoveries ~f:(Tuple.T2.uncurry discovery_to_env) in
-      Ok (discoveries_as_envs, List.map discoveries' (fun (spec, (r, _)) -> (spec, r)), closer)
+      Ok (discoveries_as_envs, List.map watched (fun (spec, (r, _)) -> (spec, r)), watched_closer)
       |> return
 
 let new_deploy t spec discoveries =

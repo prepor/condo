@@ -67,7 +67,10 @@
             // This will be in form host:port or host:port,host:port[,host:port],
             // if Multiple flag is set.
             "env": "REDIS",
-            "multiple": true
+            "multiple": true,
+            // Determines whether this discovery should be watched after the initial
+            // resolvement. Defaults to true if omitted.
+            "watch": false
         }
     ],
     // After deploying new version, Condo will wait for it to pass health check
