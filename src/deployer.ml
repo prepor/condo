@@ -127,9 +127,9 @@ let discoveries_init t spec =
               |> List.map ~f: (fun (_, (_, stopper)) -> stopper ())
               |> Deferred.all >>| fun _ -> () in
   let (watched, unwatched) = discoveries' |> List.partition_tf ~f: (fun (spec, _) ->
-    if not spec.Spec.Discovery.watch then
-      L.info "Discovery %s won't be watched after initial resolvement" spec.Spec.Discovery.service;
-    spec.Spec.Discovery.watch) in
+      if not spec.Spec.Discovery.watch then
+        L.info "Discovery %s won't be watched after initial resolvement" spec.Spec.Discovery.service;
+      spec.Spec.Discovery.watch) in
   let (watched_closer, unwatched_closer) = (make_closer watched, make_closer unwatched) in
   with_timeout (Time.Span.of_int_sec 10) init_services >>= function
   | `Timeout ->
