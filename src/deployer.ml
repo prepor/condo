@@ -145,7 +145,59 @@ let discoveries_init t spec =
       Ok (discoveries_as_envs, List.map watched (fun (spec, (r, _)) -> (spec, r)), watched_closer)
       |> return
 
+let prepare_device mapping (volume, device) =
+  let {Spec.Volume.from} = volume in
+  let {Spec.Volume.path; prepare_command; mount_command; wait} = device in
+  L.debug "Wait for device %s (volume %s)" path from;
+  let rec wait_for_device () =
+    Sys.file_exists path >>= function
+    | `Yes -> return ()
+    | _ -> (after (Time.Span.of_ms 100.0) >>= fun () ->
+            wait_for_device ()) in
+  let check_mount () =
+    List.find mapping ~f:(fun (path', from') -> path = path' && from = from')
+    |> Option.is_some in
+  let run' d = d >>| Utils.err_result_to_exn >>|? fun _ -> () in
+  let mkdir () =
+    Process.run ~prog:"mkdir" ~args:["-p"; from] () |> run'  in
+  let try_to_prepare () =
+    match prepare_command with
+    | Some (prog :: args) -> Process.run ~prog ~args () |> run'
+    | Some [] -> Error (Failure (sprintf "Invalid prepare_command for %s device" path)) |> return
+    | None -> Ok () |> return in
+  let try_to_mount () =
+    match mount_command with
+    | Some (prog :: args) -> Process.run ~prog:prog ~args:args () |> run'
+    | Some [] -> Error (Failure (sprintf "Invalid mount_command for %s device" path)) |> return
+    | None -> Process.run ~prog:"mount" ~args:[path; from] () |> run' in
+  let mount_it () =
+    if check_mount () then return (Ok ())
+    else
+      mkdir () >>=? fun () ->
+      try_to_mount () >>= (function
+          | Ok () -> return (Ok ())
+          (* ignore prepare errors *)
+          | Error _ -> try_to_prepare () >>= fun _ -> try_to_mount ()) in
+  with_timeout (Time.Span.of_int_sec wait) (wait_for_device ()) >>| (function
+      | `Result v -> Ok v
+      | `Timeout -> let err = sprintf "Timeout while waiting for device %s (volume %s)" path from in
+        Error (Failure err)) >>=?
+  mount_it
+
+let prepare_devices spec =
+  let with_devices = spec.Spec.volumes
+                     |> List.filter_map ~f:(fun v ->
+                         match v.Spec.Volume.device with
+                         | Some device -> Some (v, device)
+                         | None -> None) in
+  if List.is_empty with_devices then return (Ok ())
+  else
+    Utils.Mount.mapping () >>=? fun mapping ->
+    List.map ~f:(prepare_device mapping) with_devices
+    |> Utils.Deferred.all_or_error >>|? fun _ -> ()
+
 let new_deploy t spec discoveries =
+  prepare_devices spec >>=? fun () ->
   L.info "Starting container for %s" (spec_label spec);
   Docker.start t.docker spec >>=? fun (container, ports) ->
   register_services t spec container ports >>= function

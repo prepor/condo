@@ -1,4 +1,4 @@
-PKG yojson core ppx_deriving.std ppx_deriving_yojson async cohttp cohttp.async cmdliner mustache dispatch ppx_getenv
+PKG yojson core ppx_deriving.std ppx_deriving_yojson async cohttp cohttp.async cmdliner mustache dispatch ppx_getenv re2
 
 S src
 B _build/src

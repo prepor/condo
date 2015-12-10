@@ -17,6 +17,7 @@ in Sys.chdir root;;
 #require "ppx_deriving.std";;
 #require "ppx_deriving_yojson";;
 #require "cohttp.async";;
+#require "re2";;
 #directory "_build";;
 
 open Async.Std;;

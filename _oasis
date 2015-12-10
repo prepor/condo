@@ -16,7 +16,7 @@ Library condo
   InternalModules: Spec, Utils, Utils_base64, L
   BuildDepends:
     async,yojson,core,ppx_deriving.std(>= 3.0),ppx_deriving_yojson(>= 2.3),cohttp,cohttp.async,threads,
-    mustache
+    mustache,re2
 
 Library condo_monitoring
   Path: monitoring

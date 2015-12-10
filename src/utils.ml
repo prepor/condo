@@ -19,6 +19,10 @@ let random_str length =
 
 let exn_to_string exn = exn |> sexp_of_exn |> Sexp.to_string_hum
 
+let err_result_to_exn = function
+  | Ok res -> Ok res
+  | Error e -> Error (Error.to_exn e)
+
 let yojson_to_result = function
   | `Ok v -> Ok v
   | `Error s -> Error (Failure s)
@@ -131,9 +135,23 @@ module RunMonitor = struct
   let closer m = fun _ -> close m
 end
 
+module Option = struct
+  let of_result = function
+    | Error v -> None
+    | Ok v -> Some v
+end
+
 module Base64 = Utils_base64
 
-(* let d = *)
-(*   Utils.Deferred.all_or_error [(after (Time.Span.of_int_sec 5) >>| fun _ -> Error "oops"); *)
-(*                                (after (Time.Span.of_int_sec 10) >>| fun _ -> Error "oops long"); *)
-(*                                (after (Time.Span.of_int_sec 3) >>| fun _ -> Ok "yep!")] *)
+module Mount = struct
+  open Re2.Std
+  let is_mounted_regexp = Re2.create_exn "([/\\w])+\\s+on\\s+([/\\w])"
+  let mapping () =
+    Process.run_lines ~prog:"mount" ~args:[] () >>| err_result_to_exn >>|? fun res ->
+    res
+    |> List.filter_map ~f:(fun el -> Re2.find_submatches is_mounted_regexp el
+                                     |> Option.of_result)
+    |> List.filter_map ~f:(function
+        | [| Some _; Some device; Some mountpoint |] -> Some (device, mountpoint)
+        | _ -> None)
+end

@@ -23,9 +23,16 @@ module Discovery = struct
 end
 
 module Volume = struct
+  type device = {
+    path : string;
+    wait: int [@default 60];
+    prepare_command : string list option [@default None];
+    mount_command : string list option [@default None]
+  } [@@deriving yojson, show]
   type t = {
     from : string;
     to_ : string [@key "to"];
+    device : device option
   } [@@deriving yojson, show]
 end
 

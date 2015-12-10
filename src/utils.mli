@@ -44,10 +44,16 @@ module Base64 : sig
   val encode : ?pad:bool -> ?alphabet:string -> string -> string
 end
 
+module Mount : sig
+  val mapping : unit -> ((string * string) list, exn) Result.t Async.Std.Deferred.t
+end
+
 val of_exn : Exn.t -> string
 
 val random_str : int -> string
 
 val exn_to_string : exn -> string
+
+val err_result_to_exn : ('a, Error.t) Result.t -> ('a, exn) Result.t
 
 val yojson_to_result : [`Error of string | `Ok of 'a] -> ('a, exn) Result.t
