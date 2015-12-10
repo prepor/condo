@@ -448,6 +448,15 @@ let apply t = function
       | e -> unexpected "Started" e; Started deploy |> return)
   | Stopped -> (fun e -> unexpected "Stopped" e; Stopped |> return)
 
+let validate_stop_strategy spec =
+  let open Spec in
+  match spec.stop with
+  | Before -> true
+  | After _ ->
+    let has_host_port_services = spec.services |> List.exists ~f: (fun s ->
+      match s.Service.host_port with None -> false | Some _ -> true) in
+    not has_host_port_services
+
 let spec_watcher t spec_url =
   let (changes, _close) = Consul.key t.consul spec_url in
   let rec spec_watcher () =
@@ -459,7 +468,12 @@ let spec_watcher t spec_url =
                    | `Ok spec -> Ok spec
                  with exc -> Error exc in
       match res with
-      | Ok spec -> Pipe.write t.events (NewSpec spec) >>= fun _ -> spec_watcher ()
+      | Ok spec ->
+        if validate_stop_strategy spec then
+          Pipe.write t.events (NewSpec spec) >>= fun _ -> spec_watcher ()
+        else
+          (L.error "Invalid spec: stop strategy \"After\" is not allowed for services with \"host_port\"";
+          spec_watcher ())
       | Error exn ->
         L.error "Error in parsing spec from %s: %s" spec_url (Utils.exn_to_string exn);
         spec_watcher () in
