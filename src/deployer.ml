@@ -457,10 +457,9 @@ let validate_stop_strategy spec =
         match s.Service.host_port with None -> false | Some _ -> true) in
     not has_host_port_services
 
-let spec_watcher t spec_url =
-  let (changes, _close) = Consul.key t.consul spec_url in
+let spec_watcher t (module Watcher : Spec.Watcher) =
   let rec spec_watcher () =
-    Pipe.read changes >>= function
+    Pipe.read Watcher.reader >>= function
     | `Eof -> assert false
     | `Ok s -> let res = try
                    Yojson.Safe.from_string s |> Spec.of_yojson |> function
@@ -475,14 +474,14 @@ let spec_watcher t spec_url =
         L.error "Invalid spec: stop strategy \"After\" is not allowed for services with \"host_port\"";
         spec_watcher ()
       | Error exn ->
-        L.error "Error in parsing spec from %s: %s" spec_url (Utils.exn_to_string exn);
+        L.error "Error in parsing spec from: %s" (Utils.exn_to_string exn);
         spec_watcher () in
   spec_watcher ()
 
 let serialize_state state =
   state_to_yojson state |> Yojson.Safe.to_string
 
-let start' t events spec_url =
+let start' t events watcher =
   let rec tick state =
     (match t.advertisements with
      | Some w ->
@@ -496,13 +495,13 @@ let start' t events spec_url =
     | `Ok change -> apply t state change >>= function
       | Stopped -> return ()
       | state' -> tick state' in
-  spec_watcher t spec_url |> don't_wait_for;
+  spec_watcher t watcher |> don't_wait_for;
   let loop = tick Init in
   Shutdown.at_shutdown (fun () ->
       Pipe.write t.events Stop >>= fun () ->
       loop)
 
-let start ?advertiser ~consul ~docker ~host ~spec =
+let start ?advertiser ~consul ~docker ~host ~watcher =
   let (r, w) = Pipe.create () in
   let advertisements = match advertiser with
     | Some a ->
@@ -520,4 +519,4 @@ let start ?advertiser ~consul ~docker ~host ~spec =
   let t = { consul; docker; host;
             advertisements;
             events = w } in
-  start' t r spec
+  start' t r watcher

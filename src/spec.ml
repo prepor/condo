@@ -84,3 +84,10 @@ type t = {
   logs : Logs.t option [@default None];
   stop : stop [@default Before]
 } [@@deriving yojson, show]
+
+open Async.Std
+
+module type Watcher = sig
+  val reader : string Pipe.Reader.t
+  val close : unit -> unit Deferred.t
+end
