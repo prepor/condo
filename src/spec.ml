@@ -87,7 +87,4 @@ type t = {
 
 open Async.Std
 
-module type Watcher = sig
-  val reader : string Pipe.Reader.t
-  val close : unit -> unit Deferred.t
-end
+type watcher = string Pipe.Reader.t * (unit -> unit Deferred.t)

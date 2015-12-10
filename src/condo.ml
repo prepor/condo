@@ -8,7 +8,7 @@ let start docker endpoint (consul, advertiser) =
   Random.self_init ();
   (* FIXME host of deployer should be customizable *)
   let watcher = match (Uri.scheme endpoint, Uri.host endpoint, Uri.path endpoint) with
-    | (Some "consul", Some "", path) -> Consul.spec_watcher consul path
+    | (Some "consul", Some "", path) -> Consul.key consul path
     | (Some "file", Some "", path) -> File_watcher.spec_watcher path
     | (None, None, path) -> File_watcher.spec_watcher path
     | _ -> failwith (sprintf "Bad endpoint %s" (Uri.to_string endpoint)) in

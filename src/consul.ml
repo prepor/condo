@@ -268,13 +268,6 @@ let wait_for_passing t service_ids =
       else `Closed in
   (res, fun () -> is_running := false)
 
-let spec_watcher t ~path =
-  let (changes, stopper) = key t path in
-  (module struct
-    let reader = changes
-    let close = stopper
-  end : Spec.Watcher)
-
 module Advertiser = struct
   type t = {
     consul : consul;

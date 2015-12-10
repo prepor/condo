@@ -457,9 +457,9 @@ let validate_stop_strategy spec =
         match s.Service.host_port with None -> false | Some _ -> true) in
     not has_host_port_services
 
-let spec_watcher t (module Watcher : Spec.Watcher) =
+let spec_watcher t (pipe, _closer) =
   let rec spec_watcher () =
-    Pipe.read Watcher.reader >>= function
+    Pipe.read pipe >>= function
     | `Eof -> assert false
     | `Ok s -> let res = try
                    Yojson.Safe.from_string s |> Spec.of_yojson |> function

@@ -1,1 +1,1 @@
-val spec_watcher : path:string -> (module Spec.Watcher)
+val spec_watcher : path:string -> Spec.watcher

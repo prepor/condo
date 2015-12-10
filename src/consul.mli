@@ -37,8 +37,6 @@ val deregister_service : t -> Service.id -> (unit, exn) Result.t Deferred.t
 val wait_for_passing : t -> (Service.id * Time.Span.t) list  ->
   [> `Closed | `Error of exn | `Pass ] Async.Std.Deferred.t * (unit -> unit)
 
-val spec_watcher : t -> path:string -> (module Spec.Watcher)
-
 module Advertiser : sig
   type t
   val create : consul -> tags:string list -> prefix:string -> t

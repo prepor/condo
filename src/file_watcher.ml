@@ -27,7 +27,4 @@ let spec_watcher ~path =
   let monitor = RM.create () in
   let w = watch_loop path monitor in
   let r = Pipe.init w in
-  (module struct
-    let reader = r
-    let close = RM.closer monitor
-  end : Spec.Watcher)
+  (r, RM.closer monitor)
