@@ -6,4 +6,6 @@ B _build/src
 S monitoring
 B _build/monitoring
 
+FLG -short-paths
+
 CMT /Users/prepor/.opam/system/build/yojson.1.2.3/
