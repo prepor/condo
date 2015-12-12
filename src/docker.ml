@@ -53,8 +53,6 @@ let host t = Uri.host_with_default t.endpoint ~default:""
 let make_uri ?(query_params = []) t path =
   (Uri.with_path t.endpoint path |> Uri.with_query') query_params
 
-let rm docker container = Error (Failure "foo") |> return
-
 let pull_image t image =
   let error_checker s =
     let stream = Yojson.Basic.stream_from_string s in
