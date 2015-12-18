@@ -84,3 +84,7 @@ type t = {
   logs : Logs.t option [@default None];
   stop : stop [@default Before]
 } [@@deriving yojson, show]
+
+open Async.Std
+
+type watcher = string Pipe.Reader.t * (unit -> unit Deferred.t)

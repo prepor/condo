@@ -7,8 +7,13 @@ module A = Async.Std
 let start docker endpoint (consul, advertiser) =
   Random.self_init ();
   (* FIXME host of deployer should be customizable *)
+  let watcher = match (Uri.scheme endpoint, Uri.host endpoint, Uri.path endpoint) with
+    | (Some "consul", Some "", path) -> Consul.key consul path
+    | (Some "file", Some "", path) -> File_watcher.spec_watcher path
+    | (None, None, path) -> File_watcher.spec_watcher path
+    | _ -> failwith (sprintf "Bad endpoint %s" (Uri.to_string endpoint)) in
   Deployer.start ~consul ~docker
-    ~host:(Docker.host docker) ~spec:endpoint ?advertiser;
+    ~host:(Docker.host docker) ~watcher:watcher ?advertiser;
   (* 30 min? it should be configurable or we should excplicit about it in
      documentation *)
   let at_shutdown _s = A.Shutdown.shutdown ~force:(A.after (Time.Span.of_min 30.0)) 0 in
@@ -18,14 +23,9 @@ let start docker endpoint (consul, advertiser) =
 let endpoint =
   let doc = "Source of spec. Like consul:///services/test.json" in
   let endpoint =
-    (* It should be pluggable *)
-    let parse v =
-      let uri = Uri.of_string v in
-      match (Uri.scheme uri, Uri.host uri, Uri.path uri) with
-      | (Some "consul", Some "", path) when String.length path > 0 -> `Ok path
-      | _ -> `Error "bad spec endpoint" in
-    parse, fun ppf p -> Format.fprintf ppf "%s" p in
-  Arg.(required & pos 0 (some endpoint) None & info [] ~doc ~docv:"ENDPOINT")
+    Arg.(required & pos 0 (some string) None & info [] ~doc ~docv:"ENDPOINT") in
+  let uri endpoint = Uri.of_string endpoint in
+  Term.(const uri $ endpoint)
 
 let info =
   let doc = "Good daddy for docker containers" in
