@@ -1,3 +1,17 @@
+## 0.8.0
+
+FEATURES:
+
+  * UI rework (thanks to @superkonduktr)
+  * Added possibility to disabling discoveries watching (thanks to @superkonduktr) #7
+  * Added file as source for spec #9
+  * Added possibility to mount devices as volume #6
+
+IMPROVEMENTS:
+
+  * Added validation for host_port option (thanks to @superkonduktr) #8
+  * GC tuning
+
 ## 0.7.2
 
 FEATURES:

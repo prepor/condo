@@ -1,5 +1,5 @@
 Name: condo
-Version: 0.7.2
+Version: 0.8
 Synopsis: A library about consul and docker
 Authors: Me <me@myhost.com>
 License: LGPL with OCaml linking exception
