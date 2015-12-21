@@ -29,12 +29,12 @@ cp condo_monitoring.native release/condo_monitoring_${TAG}-x86_64_osx
 pushd monitoring-ui
 lein cljsbuild once prod
 cp -r resources/public/static/vendor out
-cp -r resources/public/static/css out
-cp -r resources/public/static/fonts out
+cp -r resources/public/static/css out/
+cp -r resources/public/static/fonts out/
 cp resources/public/static/index.html out/
 popd
 
-cp -r monitoring-ui/out release/ui
+cp -r monitoring-ui/out/ release/ui/
 tar -zcvf release/ui_${TAG}.tar.gz -C release/ui .
 
 git show -s --format=%s%b > .release_notes
