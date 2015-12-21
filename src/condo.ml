@@ -5,6 +5,7 @@ open Cmdliner
 module A = Async.Std
 
 let start docker endpoint (consul, advertiser) =
+  Gc.tune ~max_overhead:0 ~space_overhead:10 ();
   Random.self_init ();
   (* FIXME host of deployer should be customizable *)
   let watcher = match (Uri.scheme endpoint, Uri.host endpoint, Uri.path endpoint) with
