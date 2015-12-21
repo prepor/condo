@@ -8,7 +8,6 @@
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/clojurescript "1.7.170"]
                  [org.omcljs/om "1.0.0-alpha22" :exclusions [cljsjs/react]]
-                 [cljsjs/react-with-addons "0.14.3-0"]
                  [cljs-http "0.1.38"]
                  [com.andrewmcveigh/cljs-time "0.3.14"]
                  [cljsjs/react "0.14.3-0"]
@@ -25,7 +24,7 @@
   :cljsbuild {:builds [{:id "dev"
                         :source-paths ["src"]
                         :figwheel true
-                        :compiler {:main "condo.core"
+                        :compiler {:main condo.core
                                    :optimizations :none
                                    :asset-path "static/cljs/out"
                                    :output-to  "resources/public/static/cljs/main.js"
@@ -33,8 +32,8 @@
                                    :source-map true}}
                        {:id "prod"
                         :source-paths ["src"]
-                        :compiler {:main "condo.core"
+                        :compiler {:main condo.core
                                    :optimizations :advanced
                                    :asset-path "static/cljs/out"
                                    :output-to  "out/cljs/main.js"
-                                   :output-dir "out/cljs/out"}}]})
+                                   :pretty-print false}}]})
