@@ -47,41 +47,69 @@ module Deferred = struct
 end
 
 module HTTP = struct
-  exception BadStatus of Cohttp.Code.status_code
+  exception BadStatus of Cohttp.Code.status_code * string
+
+  let body_empty body =
+    Cohttp_async.Body.is_empty body >>= function
+    | true -> return `Empty
+    | false -> Cohttp_async.Body.to_string body >>| fun str -> `Body str
+
   let not_200_as_error (resp, body) =
     match Cohttp.Response.status resp with
     | #Cohttp.Code.success_status -> Ok (resp, body) |> return
     | `Not_modified -> Ok (resp, body) |> return
     | status ->
-      Cohttp_async.Body.to_string body |> A.Deferred.ignore >>= fun () ->
-      Error (BadStatus status) |> return
+      body_empty body >>| function
+      | `Empty -> Error (BadStatus (status, "[empty body]"))
+      | `Body s -> Error (BadStatus (status, s))
 
   type http_method = Get | Post | Delete | Put
 
-  let simple ?(req=Get) ?body ?headers ~parser uri =
-    let parse = function
-      | "" -> Result.try_with (fun () -> parser `Null) |> return
-      | body -> Result.try_with (fun () -> parser (Yojson.Basic.from_string body)) |> return in
-    let body' = match body with
-      | Some v -> Some (Cohttp_async.Body.of_string v) | None -> None in
-    let req_f = Cohttp_async.Client.(match req with
-        | Get -> fun uri -> get uri
-        | Post -> fun uri -> post ?headers ?body:body' uri
-        | Put -> fun uri -> put ?headers ?body:body' uri
-        | Delete -> fun uri -> delete uri) in
-    let do_req () = req_f uri in
-    try_with do_req >>=? not_200_as_error >>= function
-    | Error err ->
-      L.error "Request %s failed: %s" (Uri.to_string uri) (of_exn err);
-      Error err |> return
-    | Ok (resp, body) ->
-      L.debug "Request %s success: %s"
-        (Uri.to_string uri) (Cohttp.Response.sexp_of_t resp |> Sexp.to_string_hum);
-      (match Cohttp.Response.status resp with
-       | `Not_modified -> parse "{}"
-       | `No_content -> parse "{}"
-       | _ -> Cohttp_async.Body.to_string body >>= (fun v -> parse v))
+  let method_to_string = function
+    | Get -> "GET"
+    | Post -> "POST"
+    | Delete -> "DELETE"
+    | Put -> "PUT"
 
+  let simple_builder handler ~parser =
+    let parse = function
+      | "" -> Result.try_with (fun () -> parser `Null)
+      | body -> Result.try_with (fun () -> parser (Yojson.Basic.from_string body)) in
+
+    let do_req uri res = try_with res >>=? not_200_as_error >>= function
+      | Error err ->
+        L.error "Request %s failed: %s" (Uri.to_string uri) (of_exn err);
+        Error err |> return
+      | Ok (resp, body) ->
+        L.debug "Request %s success: %s"
+          (Uri.to_string uri) (Cohttp.Response.sexp_of_t resp |> Sexp.to_string_hum);
+        body_empty body >>| function
+        | `Empty -> parse ""
+        | `Body s -> parse s in
+    handler do_req
+
+  let get_handler cont ?headers uri =
+    cont uri (fun () -> Cohttp_async.Client.get ?headers uri)
+
+  let delete_handler cont ?headers uri =
+    cont uri (fun () -> Cohttp_async.Client.delete ?headers uri)
+
+  let post_handler cont ?headers ?body uri =
+    cont uri (fun () ->
+        let body' = match body with
+          | Some v -> Some (Cohttp_async.Body.of_string v) | None -> None in
+        Cohttp_async.Client.post ?headers ?body:body' uri)
+
+  let put_handler cont ?headers ?body uri =
+    cont uri (fun () ->
+        let body' = match body with
+          | Some v -> Some (Cohttp_async.Body.of_string v) | None -> None in
+        Cohttp_async.Client.put ?headers ?body:body' uri)
+
+  let get ~parser = simple_builder get_handler ~parser
+  let post ~parser = simple_builder post_handler ~parser
+  let put ~parser = simple_builder put_handler ~parser
+  let delete ~parser = simple_builder delete_handler ~parser
 end
 
 module Pipe = struct

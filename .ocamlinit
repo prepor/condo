@@ -1,24 +1,27 @@
 (* Ensure that we're in the root of the project. This is helpful for
    editor integration where the cwd might not be the root of the
    project.*)
-let root =
-  let rec search path = match Sys.file_exists (path ^ "/.ocamlinit") with
-  | false -> search (Filename.dirname path)
-  | true -> path
-  in search (Sys.getcwd ())
-in Sys.chdir root;;
+(* let root = *)
+(*   let rec search path = match Sys.file_exists (path ^ "/.ocamlinit") with *)
+(*   | false -> search (Filename.dirname path) *)
+(*   | true -> path *)
+(*   in search (Sys.getcwd ()) *)
+(* in Sys.chdir root;; *)
 
 #use "topfind";;
 #require "core";;
 #require "async";;
 #require "cohttp";;
-#require "atdgen";;
 #require "yojson";;
 #require "ppx_deriving.std";;
 #require "ppx_deriving_yojson";;
 #require "cohttp.async";;
 #require "re2";;
-#directory "_build";;
+#require "mustache";;
+#require "hex";;
+#require "nocrypto";;
+#directory "_build/src";;
+#directory "_build/sync";;
 
 open Async.Std;;
 open Core.Std;;

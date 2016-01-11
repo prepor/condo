@@ -112,7 +112,7 @@ let watch_uri t parser uri =
   (r, RM.closer monitor)
 
 let key t k =
-  let uri = make_uri t ("/v1/kv" ^ k) in
+  let uri = make_uri t (Filename.concat "/v1/kv"  k) in
   Uri.with_query uri [("raw", [])] |> watch_uri t parse_kv_body
 
 let discovery t ?tag (Service.Name service) =
@@ -145,6 +145,25 @@ let parse_catalog_service body =
 let catalog_service t service =
   let uri = make_uri t ("/v1/catalog/service/" ^ service) in
   watch_uri t parse_catalog_service uri
+
+module CatalogNode = struct
+  type t = {
+    address : string [@key "Address"];
+    node : string [@key "Node"];
+  } [@@deriving yojson { strict = false }, show]
+
+  type t_list = t list [@@deriving yojson, show]
+end
+
+let parse_catalog_node body =
+  let body' = Yojson.Safe.from_string body in
+  match CatalogNode.t_list_of_yojson body' with
+  | `Ok v -> Ok v
+  | `Error err -> Error err
+
+let catalog_nodes t =
+  let uri = make_uri t "/v1/catalog/nodes" in
+  watch_uri t parse_catalog_node uri
 
 module RegisterService = struct
   type check = {
@@ -190,14 +209,14 @@ let register_service t ?(id_suffix="") spec template_vars port =
     let body = RegisterService.to_yojson req |> Yojson.Safe.to_string in
     L.info "Register service %s on port %i" id port;
     L.debug "Service config: \n%s" (RegisterService.show req);
-    Utils.HTTP.(simple uri ~req:Post ~body ~parser:Fn.ignore) >>|? fun _ ->
+    Utils.HTTP.post uri ~body ~parser:Fn.ignore >>|? fun _ ->
     Service.ID id in
   check' |> return >>=? register_service'
 
 let deregister_service t (Service.ID id) =
   let uri = make_uri t ("/v1/agent/service/deregister/" ^ id) in
   L.info "Deregister service %s" id;
-  try_with (fun _ -> Client.delete uri) >>=? Utils.HTTP.not_200_as_error >>|? fun _ -> ()
+  try_with (fun _ -> Client.delete uri) >>=? Utils.HTTP.not_200_as_error >>|? Fn.ignore
 
 module CreateSession = struct
   type t =
@@ -215,14 +234,18 @@ let create_session t check =
               checks = [check];
               behavior = "delete"; } in
   let body = CreateSession.to_yojson req |> Yojson.Safe.to_string in
-  Utils.HTTP.(simple uri ~body ~req:Put ~parser)
+  Utils.HTTP.put uri ~body ~parser
 
-let put t ?session ~path ~body =
-  let uri = make_uri t (sprintf "/v1/kv%s" path) in
+let put ?session t ~path ~body =
+  let uri = make_uri t (Filename.concat "/v1/kv" path) in
   let uri' = match session with
     | Some v -> Uri.add_query_param' uri ("acquire", v)
     | None -> uri in
-  Utils.HTTP.(simple uri' ~body ~req:Put ~parser: (fun s -> ()))
+  Utils.HTTP.put uri' ~body ~parser:Fn.ignore
+
+let delete t ~path =
+  Utils.HTTP.delete (make_uri t (Filename.concat "/v1/kv%s" path)) ~parser:Fn.ignore
+  (* return (Ok ()) *)
 
 let parse_checks_body id body =
   let open Yojson.Basic.Util in
@@ -292,7 +315,7 @@ module Advertiser = struct
             L.info "Advertiser started on %i" port;
             Ivar.fill port_waiter port;
             port) in
-    (Server.create where_to_listen callback >>| fun _ -> ())
+    (Server.create where_to_listen callback >>| Fn.ignore)
     |> don't_wait_for;
     Ivar.read port_waiter
 
@@ -310,7 +333,7 @@ module Advertiser = struct
     let uri = make_uri t.consul "/v1/agent/service/register" in
     let id = "condo_" ^ Utils.random_str 10 in
     let service = (Service.ID id) in
-    let stopper () = deregister_service t.consul service >>| fun _ -> () in
+    let stopper () = deregister_service t.consul service >>| Fn.ignore in
     let make_service port =
       let req = { RegisterService.
                   id = id;
@@ -324,7 +347,7 @@ module Advertiser = struct
       let body = RegisterService.to_yojson req |> Yojson.Safe.to_string in
       L.debug "Register itself as %s" id;
       L.debug "Service config: \n%s" (RegisterService.show req);
-      Utils.HTTP.(simple uri ~req:Post ~parser:Fn.ignore ~body) in
+      Utils.HTTP.post uri ~parser:Fn.ignore ~body in
     server () >>=
     make_service >>=? fun () ->
     ((wait_for_passing t.consul [(service, Time.Span.of_int_sec 15)] |> fst >>| function

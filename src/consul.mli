@@ -18,6 +18,10 @@ val key : t -> string -> string Pipe.Reader.t * (unit -> unit Deferred.t)
 (* After stop it never produces new discoveries *)
 val discovery : t -> ?tag:string -> Service.name -> (string * int) list Pipe.Reader.t * (unit -> unit Deferred.t)
 
+val put : ?session:string -> t -> path:string -> body:string -> (unit, exn) Result.t Deferred.t
+
+val delete : t -> path:string -> (unit, exn) Result.t Deferred.t
+
 module CatalogService : sig
   type t =
     { id : string;
@@ -28,6 +32,14 @@ module CatalogService : sig
 end
 
 val catalog_service : t -> string -> (string, CatalogService.t) List.Assoc.t Pipe.Reader.t * (unit -> unit Deferred.t)
+
+module CatalogNode : sig
+  type t =
+    { address : string;
+      node : string;}
+end
+
+val catalog_nodes : t -> CatalogNode.t list Pipe.Reader.t * (unit -> unit Deferred.t)
 
 val register_service : t -> ?id_suffix:string -> Spec.Service.t -> (string * string) list -> int -> (Service.id, exn) Result.t Deferred.t
 

@@ -1,10 +1,13 @@
-PKG yojson core ppx_deriving.std ppx_deriving_yojson async cohttp cohttp.async cmdliner mustache dispatch ppx_getenv re2
+PKG yojson core ppx_deriving.std ppx_deriving_yojson async cohttp cohttp.async cmdliner mustache dispatch ppx_getenv re2 hex nocrypto xml-light
 
 S src
 B _build/src
 
 S monitoring
 B _build/monitoring
+
+S sync
+B _build/sync
 
 FLG -short-paths
 

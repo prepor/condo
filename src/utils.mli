@@ -9,9 +9,24 @@ module HTTP : sig
   val not_200_as_error :
     Cohttp_async.Response.t * Cohttp_async.Body.t -> (Cohttp_async.Response.t * Cohttp_async.Body.t, exn) Result.t Async.Std.Deferred.t
 
+  val body_empty : Cohttp_async.Body.t -> [`Body of string | `Empty] Async.Std.Deferred.t
+
   type http_method = Get | Post | Delete | Put
-  val simple : ?req:http_method -> ?body:string -> ?headers:Cohttp.Header.t ->
-    parser:(Yojson.Basic.json -> 'a) -> Uri.t -> ('a, exn) Result.t Async.Std.Deferred.t
+
+  val method_to_string : http_method -> string
+
+  val get : parser:(Yojson.Basic.json -> 'a) -> ?headers:Cohttp.Header.t ->
+    Uri.t -> ('a, exn) Result.t Async.Std.Deferred.t
+
+  val post : parser:(Yojson.Basic.json -> 'a) -> ?headers:Cohttp.Header.t ->
+    ?body:string -> Uri.t -> ('a, exn) Result.t Async.Std.Deferred.t
+
+  val put : parser:(Yojson.Basic.json -> 'a) -> ?headers:Cohttp.Header.t ->
+    ?body:string -> Uri.t -> ('a, exn) Result.t Async.Std.Deferred.t
+
+  val delete : parser:(Yojson.Basic.json -> 'a) -> ?headers:Cohttp.Header.t ->
+    Uri.t -> ('a, exn) Result.t Async.Std.Deferred.t
+
 end
 
 module Pipe : sig

@@ -80,15 +80,14 @@ let pull_image t image =
 
 let receive_image_id t image =
   let uri = make_uri t Spec.Image.(sprintf "/images/%s:%s/json" image.name image.tag) in
-  Utils.HTTP.simple uri
+  Utils.HTTP.get uri
     ~parser: (fun v -> Yojson.Basic.Util.(v |> member "Id" |> to_string))
 
 let stop t container =
   let container' = (container_to_string container) in
   L.debug "Stop container %s" container';
   let uri = make_uri t Spec.Image.(sprintf "/containers/%s/stop" container') in
-  Utils.HTTP.(simple uri ~req:Post
-                ~parser: (fun v -> ()))
+  Utils.HTTP.post uri ~parser:Fn.ignore
 
 module CreateContainer = struct
   module PortBinding = struct
@@ -154,9 +153,9 @@ let create_container t spec image_id =
                      host_config = host_config; }) in
   let body' = body |> CreateContainer.to_yojson |> Yojson.Safe.to_string in
   L.debug "Container config:\n%s" body';
-  Utils.HTTP.(simple uri ~req:Post ~body:body'
-                ~headers: (Cohttp.Header.init_with "Content-Type" "application/json")
-                ~parser: (fun v -> Yojson.Basic.Util.(v |> member "Id" |> to_string)))
+  Utils.HTTP.post uri ~body:body'
+    ~headers: (Cohttp.Header.init_with "Content-Type" "application/json")
+    ~parser: (fun v -> Yojson.Basic.Util.(v |> member "Id" |> to_string))
 
 (* Ignores any error *)
 let rename_old_container t spec =
@@ -166,8 +165,7 @@ let rename_old_container t spec =
     let new_name = n ^ "_" ^ (Utils.random_str 10) in
     let uri = make_uri t (sprintf "/containers/%s/rename" n)
               |> fun uri -> Uri.add_query_param' uri ("name", new_name) in
-    Utils.HTTP.(simple uri ~req:Post
-                  ~parser: (fun _ -> ())) >>| function
+    Utils.HTTP.post uri ~parser:Fn.ignore >>| function
     | Error err ->
       L.error "Renaming error (it can be ok) of %s: %s" n (Utils.of_exn err);
       Ok ();
@@ -175,7 +173,7 @@ let rename_old_container t spec =
 
 let start_container t spec container =
   let uri = make_uri t (sprintf "/containers/%s/start" container) in
-  Utils.HTTP.(simple uri ~req:Post ~parser: (fun _ -> ()))
+  Utils.HTTP.post uri ~parser:Fn.ignore
 
 let receive_mapping t spec container =
   let uri = make_uri t (sprintf "/containers/%s/json" container) in
@@ -190,7 +188,7 @@ let receive_mapping t spec container =
                 |> member key |> index 0
                 |> member "HostPort" |> to_string |> int_of_string in
       (s.Spec.Service.port, to_) in
-  Utils.HTTP.(simple uri ~parser: (fun v -> List.map spec.Spec.services (parse_service v)))
+  Utils.HTTP.get uri ~parser: (fun v -> List.map spec.Spec.services (parse_service v))
 
 let start t spec =
   let i = spec.Spec.image in
