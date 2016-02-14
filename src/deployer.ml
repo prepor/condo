@@ -520,3 +520,67 @@ let start ?advertiser ~consul ~docker ~host ~watcher =
             advertisements;
             events = w } in
   start' t r watcher
+
+
+module type Handler = sig
+  val handle : string -> string -> (string, exn) Result.t Deferred.t
+end
+
+module type JSONAble = sig
+  type input
+  type output
+  val input_of_yojson : Yojson.Safe.json -> [`Error of string | `Ok of input]
+  val output_to_yojson : output -> Yojson.Safe.json
+
+  val handle : input -> output Deferred.t
+end
+
+module JSON(M : JSONAble) : Handler = struct
+  let handle _ v =
+    Yojson.Safe.from_string v
+    |> M.input_of_yojson |> function
+    | `Error s -> Error (Failure s) |> return
+    | `Ok v ->
+      M.handle v
+        >>| fun res ->
+               M.output_to_yojson res
+               |> Yojson.Safe.to_string
+               |> Result.return
+end
+
+module ErrorCatcher(M : Handler) : Handler = struct
+  let handle route v =
+      try_with (fun () -> M.handle route v)
+    >>| function
+    | Ok v -> v
+    | Error exn ->
+      print_endline "Error!";
+      Error exn
+end
+
+module Hello = struct
+type input = {
+  name : string
+} [@@deriving yojson]
+type output = {
+  greeting : string
+} [@@deriving yojson]
+let handle v =
+  return {greeting = "Hello, " ^ v.name}
+end
+
+let jsonify (module M : JSONAble) =
+  (module JSON(M) : Handler)
+
+let router routes =
+  (module struct
+    let handle route v =
+      List.Assoc.find routes route
+      |> function
+      | Some (module M : Handler) -> M.handle route v
+      | None -> Error (Failure "Unknown route") |> return
+  end : Handler)
+
+let api =
+  let (module M) = router [("root", jsonify (module Hello))] in
+  (module ErrorCatcher(M) : Handler)

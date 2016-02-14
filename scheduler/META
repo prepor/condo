@@ -1,0 +1,12 @@
+# OASIS_START
+# DO NOT EDIT (digest: bb116ca6c4f40a21a3255b7711538764)
+version = "0.8"
+description = "A library about consul and docker"
+requires = "condo condo_sync edn ppx_compare ppx_fields_conv"
+archive(byte) = "condo_scheduler.cma"
+archive(byte, plugin) = "condo_scheduler.cma"
+archive(native) = "condo_scheduler.cmxa"
+archive(native, plugin) = "condo_scheduler.cmxs"
+exists_if = "condo_scheduler.cma"
+# OASIS_STOP
+

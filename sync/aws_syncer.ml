@@ -1,12 +1,7 @@
 open Core.Std
 open Async.Std
 
-module NodeRecord = struct
-  type t = {
-    ip : string;
-    tags : (string * string) list
-  } [@@deriving yojson, show]
-end
+module NodeRecord = Syncer.NodeRecord
 
 let new_nodes memory nodes =
   let is_new_node {Consul.CatalogNode.address} =

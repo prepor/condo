@@ -63,6 +63,18 @@ module Mount : sig
   val mapping : unit -> ((string * string) list, exn) Result.t Async.Std.Deferred.t
 end
 
+module Yojson_assoc : sig
+  module String :
+    sig
+      type t = (string, string) List.Assoc.t
+      val of_yojson : Yojson.Safe.json -> [ `Ok of t | `Error of string ]
+      val to_yojson : t -> Yojson.Safe.json
+
+      val pp : Format.formatter -> t -> unit
+      val show : t -> string
+    end
+end
+
 val of_exn : Exn.t -> string
 
 val random_str : int -> string

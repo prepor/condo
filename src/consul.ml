@@ -29,7 +29,7 @@ let parse_discovery_body body =
                          pair |> member "Service" |> member "Port" |> to_int) in
   let parse () = Yojson.Basic.from_string body |> to_list |> List.map ~f: parse_pair in
   try Ok (parse ())
-  with exc -> Error ("Parsing failed" ^ Utils.exn_to_string exc)
+  with exc -> Error exc
 
 let parse_kv_body body = Ok body
 
@@ -94,7 +94,7 @@ let requests_loop parser uri monitor w =
         L.error "Consul watcher %s: none index, try again" uri_s;
         try_again ()
       | `ParsingError (index', err) ->
-        L.error "Consul watcher %s: parsing error, try again" err;
+        L.error "Consul watcher %s: parsing error, try again" (Utils.of_exn err);
         loop last_res (Some index')
       | `BadStatus status ->
         L.error "Consul watcher %s: bad status %s, try again" uri_s (Cohttp.Code.string_of_status status);
@@ -114,6 +114,62 @@ let watch_uri t parser uri =
 let key t k =
   let uri = make_uri t (Filename.concat "/v1/kv"  k) in
   Uri.with_query uri [("raw", [])] |> watch_uri t parse_kv_body
+
+module KvBody = struct
+  type t = {
+    modify_index : int [@key "ModifyIndex"];
+    key : string [@key "Key"];
+    flags : int [@key "Flags"];
+    value : string [@key "Value"];
+  } [@@deriving yojson { strict = false }, show, sexp]
+
+  type t_list = t list [@@deriving yojson, show]
+end
+
+let parse_kv_recurse_body body =
+  let open Result in
+  try_with (fun () -> Yojson.Safe.from_string body)
+  >>= fun body ->
+  KvBody.t_list_of_yojson body |> Utils.yojson_to_result
+  >>| fun l ->
+  List.map l ~f:(fun ({KvBody.value} as v) ->
+      KvBody.{v with value = Utils_base64.decode value})
+
+let prefix_diff (changes, closer) =
+  let (r, w) = Pipe.create () in
+  let to_map keys =
+    List.fold keys ~init:String.Map.empty
+      ~f:(fun acc ({KvBody.key} as v) -> String.Map.add acc key v) in
+  let diff state state' =
+    let data_equal v v' = KvBody.(v.modify_index = v'.modify_index
+                                  && v.value = v'.value) in
+    String.Map.symmetric_diff state state' ~data_equal in
+  let to_event (k, v) = match v with
+    | `Left _ -> `Removed k
+    | `Right v -> `New v
+    | `Unequal (v, v') -> `Updated v' in
+  let apply_change change =
+    Pipe.write w (to_event change) in
+  let rec tick state =
+    Pipe.read changes >>= (function
+        | `Eof -> Pipe.close w |> return
+        | `Ok v ->
+          let state' = to_map v in
+          let diff = diff state state' in
+          Deferred.Sequence.iter diff apply_change
+          >>= fun () -> tick state') in
+  tick String.Map.empty |> don't_wait_for;
+  (r, closer)
+
+type prefix_change = [ `New of KvBody.t
+                     | `Updated of KvBody.t
+                     | `Removed of string ]
+
+let prefix t k : prefix_change Pipe.Reader.t * (unit -> unit Deferred.t) =
+  let uri = make_uri t (Filename.concat "/v1/kv" k) in
+  Uri.with_query uri [("recurse", [])]
+  |> watch_uri t parse_kv_recurse_body
+  |> prefix_diff
 
 let discovery t ?tag (Service.Name service) =
   let uri = make_uri t ("/v1/health/service/" ^ service) in
@@ -135,12 +191,13 @@ module CatalogService = struct
 end
 
 let parse_catalog_service body =
-  let body' = Yojson.Safe.from_string body in
-  match CatalogService.t_list_of_yojson body' with
-  | `Ok v -> v
-             |> List.map ~f:(function {CatalogService.id} as s -> (id, s))
-             |> Result.return
-  | `Error err -> Error err
+  let open Result in
+  try_with (fun () -> Yojson.Safe.from_string body)
+  >>= fun body ->
+  CatalogService.t_list_of_yojson body |> Utils.yojson_to_result
+  >>| fun v ->
+  List.map v ~f:(function {CatalogService.id} as s -> (id, s))
+
 
 let catalog_service t service =
   let uri = make_uri t ("/v1/catalog/service/" ^ service) in
@@ -156,10 +213,10 @@ module CatalogNode = struct
 end
 
 let parse_catalog_node body =
-  let body' = Yojson.Safe.from_string body in
-  match CatalogNode.t_list_of_yojson body' with
-  | `Ok v -> Ok v
-  | `Error err -> Error err
+  let open Result in
+  try_with (fun () -> Yojson.Safe.from_string body)
+  >>= fun body ->
+  CatalogNode.t_list_of_yojson body |> Utils.yojson_to_result
 
 let catalog_nodes t =
   let uri = make_uri t "/v1/catalog/nodes" in
@@ -244,8 +301,8 @@ let put ?session t ~path ~body =
   Utils.HTTP.put uri' ~body ~parser:Fn.ignore
 
 let delete t ~path =
-  Utils.HTTP.delete (make_uri t (Filename.concat "/v1/kv%s" path)) ~parser:Fn.ignore
-  (* return (Ok ()) *)
+  (* FIXME: 404 should be ok *)
+  Utils.HTTP.delete (make_uri t (Filename.concat "/v1/kv" path)) ~parser:Fn.ignore
 
 let parse_checks_body id body =
   let open Yojson.Basic.Util in
@@ -257,7 +314,7 @@ let parse_checks_body id body =
                      |> to_string )
                   |> (=) "passing" in
   try Ok (parse' ())
-  with exc -> Error (Failure ("Parsing failed" ^ Utils.exn_to_string exc))
+  with exc -> Error exc
 
 let wait_for_passing_loop t (Service.ID service_id) timeout is_running =
   let uri = make_uri t ("/v1/agent/checks") in

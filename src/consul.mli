@@ -15,6 +15,23 @@ val create : string -> t
 (* After stop it never produces new vals *)
 val key : t -> string -> string Pipe.Reader.t * (unit -> unit Deferred.t)
 
+module KvBody : sig
+  type t = {
+    modify_index : int;
+    key : string;
+    flags : int;
+    value : string;
+  }
+  val t_of_sexp : Sexp.t -> t
+  val sexp_of_t : t -> Sexp.t
+end
+
+type prefix_change = [ `New of KvBody.t
+                     | `Updated of KvBody.t
+                     | `Removed of string ]
+
+val prefix : t -> string -> prefix_change Pipe.Reader.t * (unit -> unit Deferred.t)
+
 (* After stop it never produces new discoveries *)
 val discovery : t -> ?tag:string -> Service.name -> (string * int) list Pipe.Reader.t * (unit -> unit Deferred.t)
 

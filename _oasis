@@ -16,7 +16,7 @@ Library condo
   InternalModules: Spec, Utils, Utils_base64, File_watcher
   BuildDepends:
     async,yojson,core,ppx_deriving.std(>= 3.0),ppx_deriving_yojson(>= 2.3),cohttp,cohttp.async,threads,
-    mustache,re2
+    mustache, re2, ppx_sexp_conv
 
 Library condo_monitoring
   Path: monitoring
@@ -27,7 +27,7 @@ Executable condo
   Path: src
   MainIs: condo.ml
   CompiledObject: best
-  BuildDepends: condo, cmdliner,ppx_getenv
+  BuildDepends: condo, cmdliner, ppx_getenv
   
 Executable condo_monitoring
   Path: monitoring
@@ -37,7 +37,7 @@ Executable condo_monitoring
 
 Library condo_sync
   Path: sync
-  Modules: Aws,Aws_syncer
+  Modules: Aws,Aws_syncer,Syncer
   InternalModules: Http_xml
   BuildDepends: condo,nocrypto,hex,async_ssl,xml-light
 
@@ -46,3 +46,14 @@ Executable condo_sync
   MainIs: condo_sync.ml
   CompiledObject: best
   BuildDepends: condo_sync,cmdliner,ppx_getenv
+
+Library condo_scheduler
+  Path: scheduler
+  Modules: Scheduler
+  BuildDepends: condo, condo_sync, edn, ppx_compare, ppx_fields_conv 
+
+Executable condo_scheduler
+  Path: scheduler
+  MainIs: condo_scheduler.ml
+  CompiledObject: best
+  BuildDepends: condo_scheduler,cmdliner,ppx_getenv

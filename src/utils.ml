@@ -27,6 +27,23 @@ let yojson_to_result = function
   | `Ok v -> Ok v
   | `Error s -> Error (Failure s)
 
+module Yojson_assoc = struct
+  module String = struct
+    type t = (string * string) list [@@deriving show]
+
+    let of_yojson = function
+      | `Assoc xs as json->
+        let f acc = (function
+            | (k, `String v) -> (k, v)::acc
+            | _ -> raise Exit) in
+        (try `Ok (List.fold xs ~init:[] ~f) with
+         | Exit -> `Error (sprintf "Can't parse as Assoc.List %s" (Yojson.Safe.to_string json)))
+      | json -> `Error (sprintf "Can't parse as Assoc.List %s" (Yojson.Safe.to_string json))
+    let to_yojson t =
+      `Assoc (List.Assoc.map t (fun v -> `String v))
+  end
+end
+
 module Deferred = struct
   let all_or_error' deferreds =
     Deferred.all deferreds >>| fun results ->
