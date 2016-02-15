@@ -1,8 +1,8 @@
 open Core.Std
 open Cmdliner
 
-let start consul services_prefix nodes_prefix roles_prefix =
-  Scheduler.create consul ~services_prefix ~nodes_prefix ~roles_prefix |> ignore;
+let start consul services_prefix nodes_prefix roles_prefix server_port =
+  Scheduler.create consul ~services_prefix ~nodes_prefix ~roles_prefix ~server_port |> ignore;
   Async.Std.Scheduler.go () |> never_returns
 
 let consul =
@@ -38,10 +38,15 @@ let roles_prefix =
   let doc = "KV's prefix with roles specs" in
   Arg.(value & opt string "roles" & info ["roles"] ~doc ~docv:"ROLES")
 
+let server_port =
+  let doc = "HTTP server port" in
+  Arg.(value & opt (some int) None & info ["port"] ~doc ~docv:"PORT")
+
 let info =
   let doc = "Match role specifications with node descriptions and create/delete condo specs. All is done in Consul" in
   Term.info "condo_scheduler" ~version:[%getenv "VERSION"] ~doc
 
-let condo_t = Term.(const start $ consul $ services_prefix $ nodes_prefix $ roles_prefix $ setup_log)
+let condo_t = Term.(const start $ consul $ services_prefix $ nodes_prefix $ roles_prefix
+                    $ server_port $ setup_log)
 
 let () = match Term.eval (condo_t, info)  with `Error _ -> exit 1 | _ -> exit 0

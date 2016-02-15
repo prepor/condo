@@ -1,17 +1,18 @@
+module Result' = Result
 open Core.Std
 open Async.Std
 
 type t = {
   consul : Consul.t;
   services_prefix : string;
-  watchers_w : (string * string) Pipe.Writer.t
+  watchers_w : (string * Edn.t) Pipe.Writer.t
 }
 
 type role_key = string
 
 type watcher = {
   watcher_key : string;
-  watcher_value : string;
+  watcher_value : Edn.t;
   watcher_roles : role_key list;
   watcher_stopper : unit -> unit Deferred.t;
 }
@@ -44,7 +45,65 @@ type state = {
   watchers : watcher list;
 }
 
+module JSON = struct
+  module Role = struct
+    type t = {
+      role_key : string [@key "key"];
+      role_nodes : string list [@key "nodes"];
+      role_services : string list [@key "services"];
+    } [@@deriving yojson]
+  end
+
+  module Node = struct
+    type t = {
+      node_ip : string [@key "ip"];
+      node_name : string [@key "name"];
+      node_tags : Utils.Yojson_assoc.String.t [@key "tags"];
+      node_roles : string list [@key "roles"];
+    } [@@deriving yojson]
+  end
+
+  module Watcher = struct
+    type t = {
+      watcher_key : string [@key "key"];
+      watcher_roles : string list [@key "roles"];
+      watcher_value : Yojson.Safe.json;
+    } [@@deriving yojson]
+  end
+
+  module State = struct
+    type t = {
+      roles : Role.t list;
+      nodes : Node.t list;
+      watchers : Watcher.t list;
+    } [@@deriving yojson]
+  end
+
+  let of_state {roles; nodes; watchers} =
+    let prepare_role {role_key; role_nodes; role_services} =
+      {Role.role_key = role_key;
+       role_nodes = role_nodes;
+       role_services = List.map role_services fst} in
+    let prepare_node roles {node_name; node_ip; node_tags} =
+      let roles = List.filter_map roles (function
+          | {role_nodes; role_key} when List.mem role_nodes node_name -> Some role_key
+          | _ -> None) in
+      {Node.node_name = node_name;
+       node_ip = node_ip;
+       node_tags = node_tags;
+       node_roles = roles} in
+    let prepare_watcher {watcher_key; watcher_roles; watcher_value} =
+      {Watcher.watcher_key = watcher_key;
+       watcher_roles = watcher_roles;
+       watcher_value = (Edn.Json.to_json watcher_value :> Yojson.Safe.json)} in
+    { State.roles = List.map roles prepare_role;
+      nodes = List.map nodes (prepare_node roles);
+      watchers = List.map watchers prepare_watcher;}
+end
+
+
 let rec create_service t k v =
+  L.info "Save service %s" (Filename.concat t.services_prefix k);
   Consul.put t.consul ~path:(Filename.concat t.services_prefix k) ~body:v
   >>= function
   | Error exn ->
@@ -55,7 +114,7 @@ let rec create_service t k v =
   | Ok () -> return ()
 
 let delete_service t k =
-  print_endline ("----DELETE " ^ (Filename.concat t.services_prefix k));
+  L.info "Delete service %s" (Filename.concat t.services_prefix k);
   Consul.delete t.consul ~path:(Filename.concat t.services_prefix k)
   >>= function
   | Error exn ->
@@ -117,14 +176,13 @@ let render watchers node (service_name, (v : Edn.t)) =
   let rec replace_watchers = function
     | `Tag (Some "condo", "watcher", `String key) ->
       List.find_exn watchers ~f:(fun {watcher_key} -> watcher_key = key)
-      |> fun {watcher_value} -> `String watcher_value
+      |> fun {watcher_value} -> watcher_value
     | `Assoc xs -> `Assoc (List.map xs (fun (v1, v2) -> ((replace_watchers v1), (replace_watchers v2))))
     | `List xs -> `List (List.map xs replace_watchers)
     | `Set xs -> `Set (List.map xs replace_watchers)
     | `Vector xs -> `Vector (List.map xs replace_watchers)
     | other -> other in
   let json = replace_watchers v |> Edn.Json.to_json in
-  (* (print_endline ("--JSON " ^ (Yojson.Basic.to_string json))); *)
   Spec.of_yojson (json :> Yojson.Safe.json) |> Utils.yojson_to_result
   |> function
   | Error exn ->
@@ -185,16 +243,14 @@ let apply_node_new t state {KV.key; value} =
   | Some {Syncer.NodeRecord.tags; ip} ->
     let node_name = Filename.basename key in
     let split_and_update_role (mine, all) = function
-        | {role_matcher; role_nodes} as role when role_matcher tags ->
-          let role' = {role with role_nodes = node_name::role_nodes} in
-          (role'::mine, role'::all)
-        | role -> (mine, role::all) in
+      | {role_matcher; role_nodes} as role when role_matcher tags ->
+        let role' = {role with role_nodes = node_name::role_nodes} in
+        (role'::mine, role'::all)
+      | role -> (mine, role::all) in
     let (roles, all_roles) = List.fold state.roles  ~init:([], []) ~f:split_and_update_role in
     let node = {node_ip = ip;
                 node_name = node_name;
                 node_tags = tags} in
-    print_endline ("---NEW NODE ALL ROLES " ^ (Sexp.to_string_hum (List.sexp_of_t String.sexp_of_t (List.map state.roles role_key))));
-    print_endline ("---NEW NODE ROLES " ^ (Sexp.to_string_hum (List.sexp_of_t String.sexp_of_t (List.map roles role_key))));
     let services = List.concat_map roles (fun role -> render_role node role state.watchers) in
     let vkv' = List.fold services ~init:state.vkv ~f:(fun vkv (k, v) ->
         VKV.Map.add vkv (node.node_name, k) v) in
@@ -204,13 +260,19 @@ let apply_node_new t state {KV.key; value} =
 
 let apply_node_removed t state key =
   let node_name = Filename.basename key in
+  let roles' =  List.fold state.roles  ~init:[] ~f:(fun roles role ->
+      match role with
+      | {role_nodes} when List.mem role_nodes node_name ->
+        {role with role_nodes = List.filter role_nodes ((<>) node_name)}::roles
+      | role -> role::roles) in
   let vkv' = List.fold (VKV.Map.keys state.vkv) ~init:state.vkv ~f:(fun vkv (k, v) ->
       if k = node_name then
         VKV.Map.remove vkv (k, v)
       else
         vkv) in
   {state with vkv = vkv';
-              nodes = List.filter state.nodes (fun node -> node.node_name <> node_name)}
+              nodes = List.filter state.nodes (fun node -> node.node_name <> node_name);
+              roles = roles'}
 
 let apply_node_updated t state kv =
   apply_node_removed t state kv.KV.key |> fun state ->
@@ -230,15 +292,21 @@ let find_watchers (v : Edn.t) =
   find [] v
 
 let start_watcher t init_role_key key =
+  let parse value = Result.try_with (fun () -> Edn.from_string value) |> function
+    | Ok value -> value
+    | Error exn ->
+      L.error "Can't parse value of watcher %s: %s" key (Utils.of_exn exn);
+      `Null in
   let (consul_watcher, stopper) = Consul.key t.consul key in
   Pipe.read consul_watcher
   >>| function
   | `Eof -> raise (Failure (sprintf "Watcher %s unexpectedly stopped" key))
   | `Ok value ->
-    Pipe.transfer consul_watcher t.watchers_w ~f:(fun v -> (key, v)) |> don't_wait_for;
+    let value' = parse value in
+    Pipe.transfer consul_watcher t.watchers_w ~f:(fun v -> (key, parse v)) |> don't_wait_for;
     {watcher_key = key;
      watcher_roles = [init_role_key];
-     watcher_value = value;
+     watcher_value = value';
      watcher_stopper = stopper}
 
 let increment_watchers t watchers role new_watchers =
@@ -266,7 +334,6 @@ let decrement_watchers watchers role =
   Deferred.List.fold watchers ~init:[] ~f:decrement
 
 let apply_role_new t state {KV.key; value} =
-  print_endline "---ADDED ROLE";
   parse_role key value
   |> function
   | None -> return state
@@ -283,9 +350,9 @@ let apply_role_new t state {KV.key; value} =
             match render watchers' node (service_name, v) with
             | Some content -> VKV.Map.add vkv' (node.node_name, service_name) content
             | None -> (VKV.Map.find state.vkv (node.node_name, service_name) |> function
-                      | Some old_content -> VKV.Map.add vkv' (node.node_name, service_name) old_content
-                      | None -> vkv')
-) in
+              | Some old_content -> VKV.Map.add vkv' (node.node_name, service_name) old_content
+              | None -> vkv')
+          ) in
     let vkv' = List.fold nodes ~init:state.vkv ~f:add_node in
     {state with roles = {role with role_nodes = List.map nodes node_name}::state.roles;
                 vkv = vkv';
@@ -306,7 +373,6 @@ let apply_role_removed t state key =
 (* This is not optimized but correct. We can do it because we do KV side effects
    after in diff step *)
 let apply_role_updated t state kv =
-  print_endline "---UPDATED ROLE";
   apply_role_removed t state kv.KV.key >>= fun state ->
   apply_role_new t state kv
 
@@ -329,38 +395,74 @@ let apply_watcher_updated t state key value =
   {state with vkv = vkv';
               watchers = watchers'}
 
-type event = [ `Node of [ `New of KV.t | `Removed of string | `Updated of KV.t ]
-             | `Role of [ `New of KV.t | `Removed of string | `Updated of KV.t ]
-             | `Watcher of string * string ] [@@deriving sexp]
+type rpc_event = GetState of state Ivar.t
+
+type event = Node of Consul.prefix_change
+           | Role of Consul.prefix_change
+           | Watcher of string * Edn.t
+           | RPC of rpc_event
 
 let apply t state = function
-  | `Node `New v -> apply_node_new t state v |> return
-  | `Node `Updated v -> apply_node_updated t state v |> return
-  | `Node `Removed k -> apply_node_removed t state k |> return
-  | `Role `New v -> apply_role_new t state v
-  | `Role `Updated v -> apply_role_updated t state v
-  | `Role `Removed k -> apply_role_removed t state k
-  | `Watcher (k, v) -> apply_watcher_updated t state k v |> return
+  | Node `New v -> apply_node_new t state v |> return
+  | Node `Updated v -> apply_node_updated t state v |> return
+  | Node `Removed k -> apply_node_removed t state k |> return
+  | Role `New v -> apply_role_new t state v
+  | Role `Updated v -> apply_role_updated t state v
+  | Role `Removed k -> apply_role_removed t state k
+  | Watcher (k, v) -> apply_watcher_updated t state k v |> return
+  | RPC GetState answer -> Ivar.fill answer state; return state
 
 let worker t state event =
-  print_endline ("----EVENT" ^ (Sexp.to_string_hum (sexp_of_event event)));
   apply t state event
   >>= fun state' ->
   execute_diff t state.vkv state'.vkv >>| fun () ->
-  print_endline ("----VKV: " ^ (Sexp.to_string_hum (VKV.Map.sexp_of_t String.sexp_of_t state'.vkv)));
-  print_endline ("----NODES: " ^ (Sexp.to_string_hum (List.sexp_of_t sexp_of_node state'.nodes)));
   state'
 
-let create consul ~services_prefix ~nodes_prefix ~roles_prefix =
+module Server = struct
+  module HTTP = Cohttp
+  module Server = Cohttp_async.Server
+
+  let state rpc _ _ _ =
+    let answer = Ivar.create () in
+    Pipe.write rpc (GetState answer) >>= fun () ->
+    Ivar.read answer
+    >>| fun state ->
+    state |> JSON.of_state |> JSON.State.to_yojson
+
+  let json_response handler keys rest request =
+    (handler keys rest request)
+    >>| Yojson.Safe.to_string >>= fun data ->
+    let headers = (Cohttp.Header.init_with "Content-Type" "application/json") in
+    Server.respond_with_string ~headers data
+
+  let handler rpc request =
+    let table = [
+      "/state" , json_response (state rpc)
+    ] in
+    let uri = request.HTTP.Request.uri in
+    match Dispatch.DSL.dispatch table (Uri.path uri) with
+    | Result'.Ok handler -> handler request
+    | Result'.Error _ -> Server.respond_with_string ~code:`Not_found "Not found"
+
+  let create rpc port =
+    let callback ~body _a req = handler rpc req in
+    let where_to_listen = Tcp.on_port port in
+    Server.create where_to_listen callback |> Deferred.ignore
+end
+
+let create consul ~services_prefix ~nodes_prefix ~roles_prefix ~server_port =
   let (nodes, nodes_closer) = Consul.prefix consul nodes_prefix in
-  print_endline ("---ROLES PREFIX " ^ roles_prefix);
   let (roles, roles_closer) = Consul.prefix consul roles_prefix in
   let (watchers_r, watchers_w) = Pipe.create () in
+  let (rpc_r, rpc_w) = Pipe.create () in
   let t = { consul; services_prefix; watchers_w } in
   let s = {vkv = VKV.Map.empty; roles = []; nodes = []; watchers = []} in
-  Pipe.interleave [Pipe.map nodes ~f:(fun v -> `Node v);
-                   Pipe.map roles ~f:(fun v -> `Role v);
-                   Pipe.map watchers_r ~f:(fun v -> `Watcher v);]
+  (* FIXME gracefully stop server *)
+  Option.map server_port (Server.create rpc_w) |> ignore;
+  Pipe.interleave [Pipe.map nodes ~f:(fun v -> Node v);
+                   Pipe.map roles ~f:(fun v -> Role v);
+                   Pipe.map watchers_r ~f:(fun (k, v) -> Watcher (k, v));
+                   Pipe.map rpc_r ~f:(fun v -> RPC v)]
   |> Pipe.fold ~init:s ~f:(worker t)
   >>= (fun {watchers} ->
       watchers

@@ -50,7 +50,7 @@ Executable condo_sync
 Library condo_scheduler
   Path: scheduler
   Modules: Scheduler
-  BuildDepends: condo, condo_sync, edn, ppx_compare, ppx_fields_conv 
+  BuildDepends: condo, condo_sync, edn, ppx_compare, ppx_fields_conv, dispatch
 
 Executable condo_scheduler
   Path: scheduler
