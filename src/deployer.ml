@@ -1,17 +1,153 @@
 open Core.Std
 open Async.Std
 
-type discovery_changes = (Spec.Discovery.t * (string * int) list Pipe.Reader.t) list
+type event = NewSpec of Edn.t
+           | EnvironmentUpdated
+           | Stable
+           | NotStable
+           | TryAgain of Edn.t
+           | Down
+           | Stop
+
+type t = {
+  name : string;
+  docker : Docker.t;
+  consul : Consul.t;
+  events : event Pipe.Writer.t;
+  advertiser : Advertiser.t option;
+  mutable try_again : Clock.Event.t_unit option;
+}
+
+let merge_envs_to_spec spec envs =
+  let envs_to_assoc envs =
+    List.map envs (fun {Spec.Env.name; value} -> (name, value)) in
+  let assoc_to_envs l = List.map l (fun (name,value) -> {Spec.Env.name; value}) in
+  let open Spec in
+  { spec with envs = Utils.Assoc.merge (envs_to_assoc spec.envs) (envs_to_assoc envs)
+                     |> assoc_to_envs }
+
+module Watchers = struct
+  type t = (unit -> unit Deferred.t) list
+
+  let replace (v : Edn.t) values =
+    let rec f = function
+      | `Tag (Some "condo", "watcher", `String key) ->
+        List.Assoc.find_exn values key
+      | `Assoc xs -> `Assoc (List.map xs (fun (v1, v2) -> ((f v1), (f v2))))
+      | `List xs -> `List (List.map xs f)
+      | `Set xs -> `Set (List.map xs f)
+      | `Vector xs -> `Vector (List.map xs f)
+      | other -> other in
+    f v
+
+  let find (v : Edn.t) =
+    let rec find acc = function
+      | `Tag ((Some "condo"), "watcher", (`String v)) ->
+        v::acc
+      | `Tag ((Some "condo"), "watcher", v) ->
+        L.error "Bad formed watcher: %s" (Edn.to_string v);
+        acc
+      | `Assoc ((v1, v2)::xs) ->
+        find [] v1 @ find [] v2 @ find [] (`Assoc xs) @ acc
+      | `Set (v::xs) | `List (v::xs) | `Vector (v::xs) -> find [] v @ List.concat_map xs (find []) @ acc
+      | other -> acc in
+    find [] v
+
+  let start_watcher t key =
+    let parse value = Result.try_with (fun () -> Edn.from_string value) |> function
+      | Ok value -> Ok value
+      | Error exn ->
+        Error (Failure (sprintf "Can't parse value of watcher %s: %s" key (Exn.to_string exn))) in
+    let (consul_watcher, stopper) = Consul.key t.consul key in
+    let value = Pipe.read consul_watcher >>| function
+      | `Eof -> assert false
+      | `Ok v ->
+        Pipe.transfer consul_watcher t.events ~f:(fun v -> EnvironmentUpdated) |> don't_wait_for;
+        Result.map (parse v) (fun v -> (key, v)) in
+    (stopper, value)
+
+  let stop t =
+    Deferred.List.iter t (fun f -> f ())
+
+  let apply t edn =
+    let keys = find edn in
+    let watchers = List.map keys (start_watcher t) in
+    let stoppers = List.map watchers fst in
+    let values = List.map watchers snd in
+    with_timeout (Time.Span.of_int_sec 10) (Deferred.List.all values) >>= function
+    | `Timeout ->
+      stop stoppers >>| fun () ->
+      Error (Failure "Timeout while waiting watchers")
+    | `Result l ->
+      Result.all l |> (function
+          | Error exn -> Error (Exn.Reraised ("Error in watcher", exn)) |> return
+          | Ok values -> Ok (stoppers, (replace edn values)) |> return)
+
+end
+
+module Discoveries = struct
+  type t = (unit -> unit Deferred.t) list
+
+  let format_pair (host, port) = sprintf "%s:%i" host port
+
+  let format_discovery service discoveries =
+    sprintf "%s -> %s" service (String.concat ~sep:"," (List.map discoveries format_pair))
+
+  let discovery_to_env' spec v =
+    let open Spec in
+    let mk_env v = { Env.value = v;
+                     name = spec.Discovery.env; } in
+    match (v, spec.Discovery.multiple) with
+    | (v, true) -> List.map v ~f: format_pair |> String.concat ~sep:"," |> mk_env |> Option.some
+    | (x::xs, false) -> format_pair x |> mk_env |> Option.some
+    | ([], false) -> None
+
+  let discovery_to_env spec v =
+    Option.value_exn (discovery_to_env' spec v)
+
+  let start_discovery t spec =
+    let {Spec.Discovery.tag; service; watch} = spec in
+    let (consul_watcher, stopper) = Consul.discovery t.consul ?tag:tag (Consul.Service.of_string service) in
+    let value = Pipe.read consul_watcher >>| function
+      | `Eof -> assert false
+      | `Ok v ->
+        (if watch then
+           Pipe.transfer consul_watcher t.events ~f:(fun discoveries ->
+               L.info "New discovery: %s" (format_discovery service discoveries);
+               EnvironmentUpdated) |> don't_wait_for
+         else
+           L.info "Discovery %s won't be watched after initial resolvement" service);
+        discovery_to_env spec v in
+    (stopper, value)
+
+  let stop t =
+    Deferred.List.iter t (fun f -> f ())
+
+  let apply t spec =
+    let discoveries = List.map spec.Spec.discoveries (start_discovery t) in
+    let stoppers = List.map discoveries fst in
+    let values = List.map discoveries snd in
+    with_timeout (Time.Span.of_int_sec 10) (Deferred.List.all values) >>= function
+    | `Timeout ->
+      stop stoppers >>| fun () ->
+      Error (Failure "Timeout while waiting discoveries")
+    | `Result l ->
+      Ok (stoppers, merge_envs_to_spec spec l) |> return
+
+
+end
 
 type deploy = {
   spec : Spec.t;
+  raw_spec : Edn.t;
   container : Docker.container;
   services : (Spec.Service.t * Consul.Service.id) list;
-  discoveries : discovery_changes * (unit -> unit Deferred.t);
   stop_checks : (unit -> unit);
   stop_supervisor : (unit -> unit) option;
   created_at : float;
   stable_at : float option;
+  watchers : Watchers.t;
+  discoveries : Discoveries.t;
 }
 
 let deploy_to_yojson deploy =
@@ -29,22 +165,6 @@ type state = Init
            | WaitingNext of deploy * deploy
            | Started of deploy
            | Stopped [@@deriving yojson]
-
-type event = NewSpec of Spec.t
-           | NewDiscovery of Spec.Discovery.t * (string * int) list
-           | Stable
-           | NotStable
-           | TryAgain of Spec.t
-           | Down
-           | Stop [@@deriving yojson]
-
-type t = {
-  docker: Docker.t;
-  consul: Consul.t;
-  host: string;
-  events: event Pipe.Writer.t;
-  advertisements: string Pipe.Writer.t option;
-}
 
 let stable_watcher t container services =
   let wait_for = List.map services (fun (spec, id) ->
@@ -75,7 +195,7 @@ let register_services t spec container ports =
   let suffix = Stringext.take container' 12 in
   let register_service service_spec =
     let port = List.Assoc.find_exn ports service_spec.Spec.Service.port in
-    let template_vars = [("host", t.host);
+    let template_vars = [("host", (Docker.host t.docker));
                          ("port", string_of_int port);
                          ("container", container')] in
     Consul.register_service t.consul ~id_suffix:suffix service_spec template_vars port >>|?
@@ -90,60 +210,6 @@ let register_services t spec container ports =
   | _ -> Ok res
 
 let now () = let open Core.Time in now () |> to_epoch
-
-let discovery_to_env' spec v =
-  let open Spec in
-  let format_pair = (fun (host, port) -> sprintf "%s:%i" host port ) in
-  let mk_env v = { Env.value = v;
-                   name = spec.Discovery.env; } in
-  match (v, spec.Discovery.multiple) with
-  | (v, true) -> List.map v ~f: format_pair |> String.concat ~sep:"," |> mk_env |> Option.some
-  | (x::xs, false) -> format_pair x |> mk_env |> Option.some
-  | ([], false) -> None
-
-let discovery_to_env spec v =
-  Option.value_exn (discovery_to_env' spec v)
-
-let discoveries_watcher t discoveries =
-  let discovery_watcher d_spec r =
-    Pipe.iter r ~f: (fun v -> Pipe.write t.events (NewDiscovery (d_spec, v)) ) in
-  List.iter discoveries ~f: (fun (spec, r) -> discovery_watcher spec r |> ignore)
-
-let discoveries_init t spec =
-  let discoveries' = List.map spec.Spec.discoveries ~f: (fun spec ->
-      Spec.Discovery.(spec, Consul.discovery t.consul ?tag:spec.tag (Consul.Service.of_string spec.service))) in
-  let init_services = List.map discoveries' ~f: (fun (spec, (r, _)) ->
-      let rec tick () =
-        Pipe.read r >>= (function
-            | `Eof -> Error ("Can't receive discovery for " ^ spec.Spec.Discovery.service) |> return
-            | `Ok [] ->
-              L.error "Empty discovery for %s, waiting more" spec.Spec.Discovery.service;
-              tick ()
-            | `Ok v -> Ok (spec, v) |> return) in
-      tick ())
-                      |> Deferred.all >>| partition_result in
-  let make_closer = fun discoveries ->
-    fun () -> discoveries
-              |> List.map ~f: (fun (_, (_, stopper)) -> stopper ())
-              |> Deferred.all >>| fun _ -> () in
-  let (watched, unwatched) = discoveries' |> List.partition_tf ~f: (fun (spec, _) ->
-      if not spec.Spec.Discovery.watch then
-        L.info "Discovery %s won't be watched after initial resolvement" spec.Spec.Discovery.service;
-      spec.Spec.Discovery.watch) in
-  let (watched_closer, unwatched_closer) = (make_closer watched, make_closer unwatched) in
-  with_timeout (Time.Span.of_int_sec 10) init_services >>= function
-  | `Timeout ->
-    L.error "Timeout while resolving discoveries";
-    watched_closer () >>= fun () ->
-    unwatched_closer () >>= fun () ->
-    Error (Failure "Cant resolve discoveries") |> return
-  | `Result (init_discoveries, fails) ->
-    if (List.length fails) > 0 then Error (Failure "Discoveries failed") |> return
-    else
-      unwatched_closer () >>= fun () ->
-      let discoveries_as_envs = List.map init_discoveries ~f:(Tuple.T2.uncurry discovery_to_env) in
-      Ok (discoveries_as_envs, List.map watched (fun (spec, (r, _)) -> (spec, r)), watched_closer)
-      |> return
 
 let prepare_device mapping (volume, device) =
   let {Spec.Volume.from} = volume in
@@ -196,82 +262,96 @@ let prepare_devices spec =
     List.map ~f:(prepare_device mapping) with_devices
     |> Utils.Deferred.all_or_error >>|? fun _ -> ()
 
-let new_deploy t spec discoveries =
-  prepare_devices spec >>=? fun () ->
-  L.info "Starting container for %s" (spec_label spec);
-  Docker.start t.docker spec >>=? fun (container, ports) ->
-  register_services t spec container ports >>= function
-  | Error err ->
-    (snd discoveries) () >>= fun () ->
-    (Docker.stop t.docker container >>= fun _ -> Error err |> return)
-  | Ok services ->
-    Ok { spec = spec;
-         container = container;
-         services = services;
-         stop_checks = stable_watcher t container services;
-         discoveries = discoveries;
-         stop_supervisor = None;
-         created_at = now ();
-         stable_at = None; }
-    |> return
-
-let schedule_try_again t spec =
-  after (Time.Span.of_int_sec 5) >>= (fun _ ->
-      Pipe.write t.events (TryAgain spec))
-  |> don't_wait_for
-
-let merge_envs_to_spec spec envs =
-  let envs_to_assoc envs =
-    List.map envs (fun {Spec.Env.name; value} -> (name, value)) in
-  let assoc_to_envs l = List.map l (fun (name,value) -> {Spec.Env.name; value}) in
+let validate_stop_strategy spec =
   let open Spec in
-  { spec with envs = Utils.Assoc.merge (envs_to_assoc spec.envs) (envs_to_assoc envs)
-                     |> assoc_to_envs }
+  match spec.stop with
+  | Before -> true
+  | After _ ->
+    let has_host_port_services = spec.services |> List.exists ~f: (fun s ->
+        match s.Service.host_port with None -> false | Some _ -> true) in
+    not has_host_port_services
+
+let parse_spec t edn =
+  Watchers.apply t edn
+  >>=? fun (watchers, edn') ->
+  let yojson = edn' |> Edn.Json.to_json in
+  Spec.of_yojson (yojson :> Yojson.Safe.json) |> function
+  | `Ok spec when validate_stop_strategy spec ->
+    Ok (spec, watchers) |> return
+  | `Ok _ ->
+    Watchers.stop watchers |> don't_wait_for;
+    Error (Failure "Invalid spec: stop strategy \"After\" is not allowed for services with \"host_port\"")
+    |> return
+  | `Error err ->
+    Watchers.stop watchers |> don't_wait_for;
+    Error (Failure ("Error in parsing spec: " ^ err)) |> return
 
 (* We just ignore fails in stop action *)
 let stop t ?(timeout=0) deploy =
   deploy.stop_checks ();
-  (snd deploy.discoveries) () >>= fun () ->
+  Discoveries.stop deploy.discoveries >>= fun () ->
+  Watchers.stop deploy.watchers >>= fun () ->
   deregister_services t deploy >>= fun () ->
   after (Time.Span.of_int_sec timeout) >>= fun () ->
   L.info "Stop container %s of deploy %s"
     (Docker.container_to_string deploy.container) (spec_label deploy.spec);
-  let r = (snd deploy.discoveries) () >>= fun () ->
-    (match deploy.stop_supervisor with
-     | Some s -> s (); return ()
-     | None -> return ()) >>= fun () ->
-    Docker.stop t.docker deploy.container in
-  r >>= (function
-      | Error err ->
-        L.error "Error in stopping of deploy %s, container %s:\n%s"
-          (spec_label deploy.spec) (Docker.container_to_string deploy.container) (Utils.of_exn err);
-        return ()
-      | Ok _ -> return ())
+  (match deploy.stop_supervisor with
+   | Some s -> s (); return ()
+   | None -> return ()) >>= fun () ->
+  Docker.stop t.docker deploy.container >>= function
+  | Error err ->
+    L.error "Error in stopping of deploy %s, container %s:\n%s"
+      (spec_label deploy.spec) (Docker.container_to_string deploy.container) (Utils.of_exn err);
+    return ()
+  | Ok _ -> return ()
 
-let deploy t spec =
-  discoveries_init t spec >>=? fun (init, changes, closer) ->
-  let spec' = merge_envs_to_spec spec init in
-  new_deploy t spec' (changes, closer) >>|? fun deploy ->
-  deploy
+let new_deploy t edn prev_deploy stop_before_start =
+  parse_spec t edn
+  >>=? fun (spec, watchers) ->
+  Discoveries.apply t spec
+  >>=? fun (discoveries, spec') ->
+  match (spec', prev_deploy) with
+  | (spec, Some prev_deploy) when spec = prev_deploy.spec ->
+    L.info "Specs are same";
+    Watchers.stop watchers >>= fun () ->
+    Discoveries.stop discoveries >>= fun () ->
+    Ok prev_deploy |> return
+  | _ ->
+    (match (stop_before_start, prev_deploy) with
+     | (true, Some deploy) -> stop t deploy
+     | _ -> return ()) >>= fun () ->
+    prepare_devices spec' >>=? fun () ->
+    L.info "Starting container for %s" (spec_label spec');
+    Docker.start t.docker spec' >>=? fun (container, ports) ->
+    register_services t spec' container ports >>= function
+    | Error err ->
+      Watchers.stop watchers >>= fun () ->
+      Discoveries.stop discoveries >>= fun () ->
+      (Docker.stop t.docker container >>= fun _ -> Error err |> return)
+    | Ok services ->
+      Ok { spec = spec';
+           raw_spec = edn;
+           container = container;
+           services = services;
+           stop_checks = stable_watcher t container services;
+           stop_supervisor = None;
+           created_at = now ();
+           stable_at = None;
+           discoveries = discoveries;
+           watchers = watchers; }
+      |> return
 
-let format_discovery { Spec.Env.name; value; _} =
-  sprintf "%s -> %s" name value
+let clear_try_again t =
+  match t.try_again with
+  | Some e -> Clock.Event.abort_if_possible e ()
+  | None -> ()
 
-let format_discovery_raw spec value =
-  discovery_to_env spec value |> format_discovery
-
-let with_new_discovery spec (d_spec, discovery) =
-  let env = discovery_to_env' d_spec discovery in
-  match env with
-  | None -> None
-  | Some env' ->
-    let spec' = merge_envs_to_spec spec [env'] in
-    (* For cases then discovery was changed to None and returned to Some with
-       same value. We can save us here from waste restart *)
-    if spec' = spec then None
-    else
-      (L.info "New discovery for deploy %s: %s" (spec_label spec) (format_discovery env');
-       Some spec')
+let schedule_try_again t edn =
+  let e = Clock.Event.after (Time.Span.of_int_sec 5) in
+  t.try_again <- Some e;
+  (Clock.Event.fired e >>= fun _ ->
+   Pipe.write t.events (TryAgain edn))
+  |> don't_wait_for
 
 let at_stable t deploy =
   let supervisor_watcher t supervisor deploy =
@@ -280,74 +360,77 @@ let at_stable t deploy =
     | Error err -> Pipe.write t.events Down in
   let (supervisor, stop_supervisor) = Docker.supervisor t.docker deploy.container in
   supervisor_watcher t supervisor deploy |> don't_wait_for;
-  discoveries_watcher t (fst deploy.discoveries);
   { deploy with stop_supervisor = Some stop_supervisor;
                 stable_at = Some (now ())}
 
-let init_deploy t spec =
-  L.info "Initialized deploy %s" (spec_label spec);
-  deploy t spec >>= function
+let init_deploy t edn =
+  (* L.info "Initialized deploy %s" (spec_label spec); *)
+  clear_try_again t;
+  new_deploy t edn None false >>= function
   | Ok deploy -> Waiting deploy |> return
   | Error err ->
-    L.error "Error while deploying %s:\n%s" (spec_label spec) (Utils.exn_to_string err);
-    schedule_try_again t spec;
+    L.error "Error while deploying:\n%s" (Exn.to_string err);
+    schedule_try_again t edn;
     return Init
 
-let started_deploy t current_deploy spec =
-  L.info "New deploy %s. Current %s" (spec_label spec) (spec_label current_deploy.spec);
-  L.debug "Spec: %s" (Spec.show spec);
-  deploy t spec >>| function
-  | Ok next_deploy -> WaitingNext (current_deploy, next_deploy)
-  | Error err ->
-    L.error "Error while deploying %s:\n%s" (spec_label spec) (Utils.exn_to_string err);
-    Started current_deploy
-
-let failed_deploy t deploy =
-  L.error "Deploy failed %s. We'll try again after few seconds" (spec_label deploy.spec);
-  stop t deploy >>| fun () ->
-  schedule_try_again t deploy.spec;
-  Init
+(* let started_deploy t current_deploy spec watchers = *)
+(*   L.info "New deploy %s. Current %s" (spec_label spec) (spec_label current_deploy.spec); *)
+(*   L.debug "Spec: %s" (Spec.show spec); *)
+(*   deploy t spec watchers >>| function *)
+(*   | Ok next_deploy -> WaitingNext (current_deploy, next_deploy) *)
+(*   | Error err -> *)
+(*     L.error "Error while deploying %s:\n%s" (spec_label spec) (Utils.exn_to_string err); *)
+(*     Started current_deploy *)
 
 let init_new_spec = init_deploy
 
 let init_try_again = init_deploy
 
-let waiting_new_spec t deploy spec =
-  L.info "New spec %s. Current %s. Stop current and start new" (spec_label spec) (spec_label deploy.spec);
-  L.debug "Spec: %s" (Spec.show spec);
-  stop t deploy >>= fun () ->
-  init_deploy t spec
+let waiting_redeploy t deploy edn =
+  clear_try_again t;
+  new_deploy t edn (Some deploy) true >>= function
+  | Ok deploy -> Waiting deploy |> return
+  | Error err ->
+    L.error "Error while deploying:\n%s" (Exn.to_string err);
+    schedule_try_again t edn;
+    return Init
+
+let waiting_new_spec t deploy edn =
+  L.info "New spec. Current %s. Stop current and start new" (spec_label deploy.spec);
+  (* L.debug "Spec: %s" (Spec.show spec); *)
+  waiting_redeploy t deploy edn
 
 let waiting_stop t deploy =
   stop t deploy >>| fun () ->
   Stopped
 
 let waiting_stable t deploy =
+  clear_try_again t;
   L.info "Deploy %s is stable now" (spec_label deploy.spec);
   let deploy' = at_stable t deploy in
   Started deploy' |> return
 
-let waiting_not_stable = failed_deploy
+let waiting_not_stable t deploy =
+  L.error "Deploy not stable, redeploy";
+  waiting_redeploy t deploy deploy.raw_spec
 
-let waiting_next_new_spec_before t current next spec =
-  L.info "New spec %s. We are stopping %s and %s to deploy it"
-    (spec_label spec) (spec_label current.spec) (spec_label next.spec);
-  L.debug "Spec: %s" (Spec.show spec);
-  stop t current >>= fun () ->
-  stop t next >>= fun () ->
-  init_deploy t spec
+let waiting_environment_updated t deploy =
+  waiting_redeploy t deploy deploy.raw_spec
 
-let waiting_next_new_spec_after t current next spec =
-  L.info "New spec %s. We are stopping %s to deploy it"
-    (spec_label spec) (spec_label next.spec);
-  L.debug "Spec: %s" (Spec.show spec);
-  stop t next >>= fun () ->
-  deploy t spec >>| function
+let waiting_next_redeploy t current next edn =
+  clear_try_again t;
+  new_deploy t edn (Some next) true >>| function
   | Ok deploy -> WaitingNext (current, deploy)
   | Error err ->
-    L.error "Error while deploying %s. Stays with stable %s. Error:\n %s"
-      (spec_label spec) (spec_label current.spec) (Utils.of_exn err);
+    L.error "Error while deploying. Stays with stable %s. Error:\n %s"
+      (spec_label current.spec) (Exn.to_string err);
+    schedule_try_again t edn;
     Started current
+
+let waiting_next_new_spec t current next edn =
+  L.info "New spec. We are stopping %s to deploy it" (spec_label next.spec);
+  (* L.debug "Spec: %s" (Spec.show spec); *)
+  waiting_next_redeploy t current next edn
 
 let waiting_next_stop t current next =
   stop t next >>= fun () ->
@@ -370,10 +453,8 @@ let waiting_next_not_stable t current next =
   stop t next >>= fun () ->
   Started current |> return
 
-let waiting_next_new_discovery t current next (d_spec, discoveries) =
-  L.info "New discovery value %s for %s while we are waiting for a next deploy %s. Ignores it"
-    (format_discovery_raw d_spec discoveries) (spec_label current.spec) (spec_label next.spec);
-  WaitingNext (current, next) |> return
+let waiting_next_environment_updated t current next =
+  waiting_next_redeploy t current next next.raw_spec
 
 let waiting_next_down t current next =
   L.error "Current container of deploy %s is down while we are waiting for %s. Continue to wait for %s"
@@ -381,206 +462,143 @@ let waiting_next_down t current next =
   stop t current >>= fun () ->
   Waiting next |> return
 
-let started_new_spec_before t deploy spec =
-  L.info "New spec %s. Stopping %s and deploy it"
-    (spec_label spec) (spec_label deploy.spec);
-  L.debug "Spec:\n%s" (Spec.show spec);
-  stop t deploy >>= fun () ->
-  init_deploy t spec
+let started_before t deploy edn =
+  clear_try_again t;
+  new_deploy t edn (Some deploy) true >>= function
+  | Ok deploy -> Waiting deploy |> return
+  | Error err ->
+    L.error "Error while deploying:\n%s" (Exn.to_string err);
+    schedule_try_again t edn;
+    return Init
 
-let started_new_spec_after = started_deploy
+let started_after t deploy edn =
+  clear_try_again t;
+  new_deploy t edn None false >>= function
+  | Ok next_deploy -> WaitingNext (deploy, next_deploy) |> return
+  | Error err ->
+    L.error "Error while deploying:\n%s" (Exn.to_string err);
+    schedule_try_again t edn;
+    return (Started deploy)
 
-let started_new_discovery_before t deploy discovery =
-  match with_new_discovery deploy.spec discovery with
-  | Some spec' ->
-    stop t deploy >>= fun () ->
-    init_deploy t spec'
-  | None -> Started deploy |> return
+let started_new_spec_before t deploy edn =
+  started_before t deploy edn
 
-let started_new_discovery_after t current_deploy discovery =
-  match with_new_discovery current_deploy.spec discovery with
-  | Some spec' ->
-    started_deploy t current_deploy spec'
-  | None -> Started current_deploy |> return
+let started_new_spec_after t deploy edn =
+  started_after t deploy edn
+
+let started_environment_updated_before t deploy =
+  started_before t deploy deploy.raw_spec
+
+let started_environment_updated_after t deploy =
+  started_after t deploy deploy.raw_spec
 
 let started_stop t deploy =
+  print_endline "---STOP";
   stop t deploy >>= fun () ->
   Stopped |> return
 
-let started_down = failed_deploy
+let started_down t deploy =
+  L.error "Deploy failed %s. We'll try again after few seconds" (spec_label deploy.spec);
+  stop t deploy >>| fun () ->
+  schedule_try_again t deploy.raw_spec;
+  Init
+
+let started_try_again t deploy edn =
+  started_after t deploy edn
 
 let unexpected state e =
-  L.error "Unexpected event in % state:\n%s" state (event_to_yojson e |> Yojson.Safe.to_string)
+  L.error "Unexpected event in % state:\n%s" state "" (* (event_to_yojson e |> Yojson.Safe.to_string) *)
 
 let apply t = function
   | Init -> (function
-      | NewSpec spec -> init_new_spec t spec
-      | TryAgain spec -> init_try_again t spec
+      | NewSpec edn -> init_new_spec t edn
+      | TryAgain edn -> init_try_again t edn
       | Stop -> return Stopped
       | e -> unexpected "Init" e; Init |> return)
   | Waiting deploy -> (function
       | NewSpec spec -> waiting_new_spec t deploy spec
-      | TryAgain spec -> Waiting deploy |> return
       | Stop -> waiting_stop t deploy
       | Stable -> waiting_stable t deploy
       | NotStable -> waiting_not_stable t deploy
+      | EnvironmentUpdated -> waiting_environment_updated t deploy
       | e -> unexpected "Waiting" e; Waiting deploy |> return)
   | WaitingNext (current, next) -> (function
-      | NewSpec spec -> (match spec.Spec.stop with
-          | Spec.Before -> waiting_next_new_spec_before t current next spec
-          | Spec.After _ -> waiting_next_new_spec_after t current next spec)
-      | TryAgain spec -> WaitingNext (current, next) |> return (* ignores *)
+      | NewSpec edn -> waiting_next_new_spec t current next edn
       | Stop -> waiting_next_stop t current next
       | Stable -> waiting_next_stable t current next
       | NotStable -> waiting_next_not_stable t current next
-      | NewDiscovery (d_spec, discoveries) -> waiting_next_new_discovery t current next (d_spec, discoveries)
-      | Down -> waiting_next_down t current next)
+      | EnvironmentUpdated -> waiting_next_environment_updated t current next
+      | Down -> waiting_next_down t current next
+      | e -> unexpected "WaitingNext" e; WaitingNext (current, next) |> return)
   | Started deploy -> (function
-      | NewSpec spec -> (match deploy.spec.Spec.stop with
-          | Spec.Before -> started_new_spec_before t deploy spec
-          | Spec.After _ -> started_new_spec_after t deploy spec)
-      | TryAgain spec -> Started deploy |> return
+      | NewSpec edn -> (match deploy.spec.Spec.stop with
+          | Spec.Before -> started_new_spec_before t deploy edn
+          | Spec.After _ -> started_new_spec_after t deploy edn)
+      | TryAgain edn -> (match deploy.spec.Spec.stop with
+          | Spec.Before -> unexpected "Started" Spec.Before; Started deploy |> return
+          | Spec.After _ -> started_try_again t deploy edn)
       | Stop -> started_stop t deploy
-      | NewDiscovery (d_spec, discoveries) -> (match deploy.spec.Spec.stop with
-          | Spec.Before -> started_new_discovery_before t deploy (d_spec, discoveries)
-          | Spec.After _ -> started_new_discovery_after t deploy (d_spec, discoveries))
+      | EnvironmentUpdated -> (match deploy.spec.Spec.stop with
+          | Spec.Before -> started_environment_updated_before t deploy
+          | Spec.After _ -> started_environment_updated_after t deploy)
       | Down -> started_down t deploy
       | e -> unexpected "Started" e; Started deploy |> return)
   | Stopped -> (fun e -> unexpected "Stopped" e; Stopped |> return)
 
-let validate_stop_strategy spec =
-  let open Spec in
-  match spec.stop with
-  | Before -> true
-  | After _ ->
-    let has_host_port_services = spec.services |> List.exists ~f: (fun s ->
-        match s.Service.host_port with None -> false | Some _ -> true) in
-    not has_host_port_services
-
-let spec_watcher t (pipe, _closer) =
+let spec_watcher t pipe =
   let rec spec_watcher () =
     Pipe.read pipe >>= function
     | `Eof -> assert false
     | `Ok s -> let res = try
-                   Yojson.Safe.from_string s |> Spec.of_yojson |> function
-                   | `Error err -> Error (Failure err)
-                   | `Ok spec -> Ok spec
+                   Ok (Edn.from_string s)
                  with exc -> Error exc in
       match res with
-      | Ok spec when validate_stop_strategy spec ->
-        Pipe.write t.events (NewSpec spec) >>= fun _ ->
-        spec_watcher ()
-      | Ok _ ->
-        L.error "Invalid spec: stop strategy \"After\" is not allowed for services with \"host_port\"";
+      | Ok edn ->
+        Pipe.write t.events (NewSpec edn) >>= fun _ ->
         spec_watcher ()
       | Error exn ->
-        L.error "Error in parsing spec from: %s" (Utils.exn_to_string exn);
+        L.error "Error in parsing spec from: %s" (Exn.to_string exn);
         spec_watcher () in
   spec_watcher ()
 
 let serialize_state state =
   state_to_yojson state |> Yojson.Safe.to_string
 
-let start' t events watcher =
+let worker t events =
   let rec tick state =
-    (match t.advertisements with
-     | Some w ->
-       let s = (serialize_state state) in
-       L.debug "Advertise state:\n%s" s;
-       Pipe.write w s
+    (* print_endline (serialize_state state); *)
+    (match t.advertiser with
+     | Some adv ->
+       Advertiser.advertise adv t.name (serialize_state state)
      | None -> return ()) >>= fun () ->
-    Pipe.read events
-    >>= function
+    Pipe.read events >>= function
     | `Eof -> assert false
-    | `Ok change -> apply t state change >>= function
+    | `Ok change ->
+      (* L.debug "New event: %s" (Yojson.Safe.to_string (event_to_yojson change)); *)
+      apply t state change >>= function
       | Stopped -> return ()
       | state' -> tick state' in
-  spec_watcher t watcher |> don't_wait_for;
-  let loop = tick Init in
-  Shutdown.at_shutdown (fun () ->
-      Pipe.write t.events Stop >>= fun () ->
-      loop)
+  tick Init
 
-let start ?advertiser ~consul ~docker ~host ~watcher =
+let rec init_advertise t =
+  match t.advertiser with
+  | Some adv ->
+    (Advertiser.init adv t.name >>= function
+      | Error exn ->
+        L.error "Error in advertise init, try again";
+        after (Time.Span.of_int_sec 5) >>= fun () ->
+        init_advertise t
+      | Ok () -> return ())
+  | None -> return ()
+
+let start ~name ~consul ~docker ~watcher ~advertiser =
   let (r, w) = Pipe.create () in
-  let advertisements = match advertiser with
-    | Some a ->
-      let (a_r, a_w) = Pipe.create() in
-      (Consul.Advertiser.start a >>= (function
-           | Error err ->
-             L.error "Error while starting advertiser: %s" (Utils.of_exn err);
-             Shutdown.shutdown 1;
-             return ()
-           | Ok (a_w', stopper) ->
-             Shutdown.at_shutdown (fun () -> stopper ());
-             Pipe.transfer a_r a_w' ~f:Fn.id) |> don't_wait_for);
-      Some a_w
-    | None -> None in
-  let t = { consul; docker; host;
-            advertisements;
-            events = w } in
-  start' t r watcher
-
-
-module type Handler = sig
-  val handle : string -> string -> (string, exn) Result.t Deferred.t
-end
-
-module type JSONAble = sig
-  type input
-  type output
-  val input_of_yojson : Yojson.Safe.json -> [`Error of string | `Ok of input]
-  val output_to_yojson : output -> Yojson.Safe.json
-
-  val handle : input -> output Deferred.t
-end
-
-module JSON(M : JSONAble) : Handler = struct
-  let handle _ v =
-    Yojson.Safe.from_string v
-    |> M.input_of_yojson |> function
-    | `Error s -> Error (Failure s) |> return
-    | `Ok v ->
-      M.handle v
-        >>| fun res ->
-               M.output_to_yojson res
-               |> Yojson.Safe.to_string
-               |> Result.return
-end
-
-module ErrorCatcher(M : Handler) : Handler = struct
-  let handle route v =
-      try_with (fun () -> M.handle route v)
-    >>| function
-    | Ok v -> v
-    | Error exn ->
-      print_endline "Error!";
-      Error exn
-end
-
-module Hello = struct
-type input = {
-  name : string
-} [@@deriving yojson]
-type output = {
-  greeting : string
-} [@@deriving yojson]
-let handle v =
-  return {greeting = "Hello, " ^ v.name}
-end
-
-let jsonify (module M : JSONAble) =
-  (module JSON(M) : Handler)
-
-let router routes =
-  (module struct
-    let handle route v =
-      List.Assoc.find routes route
-      |> function
-      | Some (module M : Handler) -> M.handle route v
-      | None -> Error (Failure "Unknown route") |> return
-  end : Handler)
-
-let api =
-  let (module M) = router [("root", jsonify (module Hello))] in
-  (module ErrorCatcher(M) : Handler)
+  let t = { consul; docker;
+            advertiser; name;
+            events = w; try_again = None } in
+  spec_watcher t watcher |> don't_wait_for;
+  init_advertise t >>| fun () ->
+  let worker = worker t r in
+  (fun () ->
+     Pipe.write t.events Stop >>= fun () ->
+     worker)

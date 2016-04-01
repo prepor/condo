@@ -1,4 +1,4 @@
-PKG yojson core ppx_deriving.std ppx_deriving_yojson async cohttp cohttp.async cmdliner mustache dispatch ppx_getenv re2 hex nocrypto xml-light ppx_fields_conv edn ppx_compare ppx_sexp_conv
+PKG yojson core ppx_deriving.std ppx_deriving_yojson async cohttp cohttp.async cmdliner mustache dispatch ppx_getenv re2 hex nocrypto xml-light ppx_fields_conv edn ppx_compare ppx_sexp_conv ppx_let
 
 S src
 B _build/src

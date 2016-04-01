@@ -9,7 +9,7 @@ module HTTP : sig
   val not_200_as_error :
     Cohttp_async.Response.t * Cohttp_async.Body.t -> (Cohttp_async.Response.t * Cohttp_async.Body.t, exn) Result.t Async.Std.Deferred.t
 
-  val body_empty : Cohttp_async.Body.t -> [`Body of string | `Empty] Async.Std.Deferred.t
+  val body_empty : Cohttp.Code.status_code -> Cohttp_async.Body.t -> [`Body of string | `Empty] Async.Std.Deferred.t
 
   type http_method = Get | Post | Delete | Put
 

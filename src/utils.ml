@@ -66,17 +66,20 @@ end
 module HTTP = struct
   exception BadStatus of Cohttp.Code.status_code * string
 
-  let body_empty body =
-    Cohttp_async.Body.is_empty body >>= function
-    | true -> return `Empty
-    | false -> Cohttp_async.Body.to_string body >>| fun str -> `Body str
+  let body_empty status body =
+    match status with
+    | `No_content -> return `Empty
+    | _ ->
+      Cohttp_async.Body.is_empty body >>= function
+      | true -> return `Empty
+      | false -> Cohttp_async.Body.to_string body >>| fun str -> `Body str
 
   let not_200_as_error (resp, body) =
     match Cohttp.Response.status resp with
     | #Cohttp.Code.success_status -> Ok (resp, body) |> return
     | `Not_modified -> Ok (resp, body) |> return
     | status ->
-      body_empty body >>| function
+      body_empty status body >>| function
       | `Empty -> Error (BadStatus (status, "[empty body]"))
       | `Body s -> Error (BadStatus (status, s))
 
@@ -100,7 +103,7 @@ module HTTP = struct
       | Ok (resp, body) ->
         L.debug "Request %s success: %s"
           (Uri.to_string uri) (Cohttp.Response.sexp_of_t resp |> Sexp.to_string_hum);
-        body_empty body >>| function
+        body_empty (Cohttp.Response.status resp) body >>| function
         | `Empty -> parse ""
         | `Body s -> parse s in
     handler do_req

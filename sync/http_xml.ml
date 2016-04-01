@@ -13,7 +13,7 @@ let simple_builder handler ~parser =
     | Ok (resp, body) ->
       L.debug "Request %s success: %s"
         (Uri.to_string uri) (Cohttp.Response.sexp_of_t resp |> Sexp.to_string_hum);
-      Utils.HTTP.body_empty body >>| function
+      Utils.HTTP.body_empty (Cohttp.Response.status resp) body >>| function
       | `Empty -> parse ""
       | `Body s -> parse s in
   handler do_req

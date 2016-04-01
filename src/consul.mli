@@ -1,5 +1,5 @@
 open Core.Std
-open Async.Std
+open! Async.Std
 
 type t
 type consul = t
@@ -66,9 +66,4 @@ val deregister_service : t -> Service.id -> (unit, exn) Result.t Deferred.t
 val wait_for_passing : t -> (Service.id * Time.Span.t) list  ->
   [> `Closed | `Error of exn | `Pass ] Async.Std.Deferred.t * (unit -> unit)
 
-module Advertiser : sig
-  type t
-  val create : consul -> tags:string list -> prefix:string -> t
-
-  val start : t -> (string Pipe.Writer.t * (unit -> unit Deferred.t), exn) Result.t Deferred.t
-end
+val create_session : t -> string -> (string, exn) Result.t Deferred.t
