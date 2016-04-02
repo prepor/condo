@@ -54,12 +54,12 @@ let start_watcher consul endpoint =
   Pipe.fold changes ~init:[] ~f:handle |> Deferred.ignore |> don't_wait_for;
   r
 
-let start_supervisor docker advertiser consul endpoints =
+let start_supervisor ~docker ~advertiser ~consul ~endpoints ~envs =
   let specs = Pipe.interleave (List.map ~f:(start_watcher consul) endpoints) in
   let tick deployers = function
     | Add (key, watcher) ->
       let%map deployer = Deployer.start ~name:(Filename.basename key)
-          ~docker ~consul ~advertiser ~watcher in
+          ~docker ~consul ~advertiser ~watcher ~envs in
       (key, deployer)::deployers
     | Removed key ->
       let deployer = List.Assoc.find_exn deployers key in
@@ -69,7 +69,7 @@ let start_supervisor docker advertiser consul endpoints =
     Deferred.List.iter deployers (fun (_, stopper) -> stopper ()) in
   (fun () -> Pipe.close_read specs; worker)
 
-let start ~advertiser_config ~consul_config ~docker_config ~endpoints =
+let start ~advertiser_config ~consul_config ~docker_config ~endpoints ~envs =
   (* let watcher = match (Uri.scheme endpoint, Uri.host endpoint, Uri.path endpoint) with *)
   (*   | (Some "consul", Some "", path) -> Consul.key consul path *)
   (*   | (Some "file", Some "", path) -> File_watcher.spec_watcher path *)
@@ -78,7 +78,7 @@ let start ~advertiser_config ~consul_config ~docker_config ~endpoints =
   let consul = start_consul consul_config in
   let docker = start_docker docker_config in
   let%map advertiser = start_advertiser consul advertiser_config in
-  let stop_supervisor = start_supervisor docker advertiser consul endpoints in
+  let stop_supervisor = start_supervisor ~docker ~advertiser ~consul ~endpoints ~envs in
   (match advertiser with
    | Some v -> Shutdown.at_shutdown (fun () -> Advertiser.stop v)
    | None -> ());

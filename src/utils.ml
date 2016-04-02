@@ -69,6 +69,7 @@ module HTTP = struct
   let body_empty status body =
     match status with
     | `No_content -> return `Empty
+    | `Not_modified -> return `Empty
     | _ ->
       Cohttp_async.Body.is_empty body >>= function
       | true -> return `Empty
@@ -202,4 +203,28 @@ module Mount = struct
     |> List.filter_map ~f:(function
         | [| Some _; Some device; Some mountpoint |] -> Some (device, mountpoint)
         | _ -> None)
+end
+
+module Edn = struct
+  open! Sexp
+  let rec sexp_of_t (edn : Edn.t) =
+    match edn with
+    | `Keyword (Some prefix, v) -> List [(Atom "keyword"); (Atom (prefix ^ "/" ^ v))]
+    | `Keyword (None, v) -> List [(Atom "keyword"); (Atom v)]
+    | `Symbol (Some prefix, v) -> List [(Atom "symbol"); (Atom (prefix ^ "/" ^ v))]
+    | `Symbol (None, v) -> List [(Atom "symbol"); (Atom v)]
+    | `Assoc xs -> List ((Atom "assoc")::(List.map xs (fun (k, v) -> List [sexp_of_t k; sexp_of_t v])))
+    | `List xs -> List ((Atom "list")::(List.map xs sexp_of_t))
+    | `Vector xs -> List ((Atom "vector")::(List.map xs sexp_of_t))
+    | `Set xs -> List ((Atom "set")::(List.map xs sexp_of_t))
+    | `Char v -> List [(Atom "char"); (Atom v)]
+    | `Decimal v -> List [(Atom "decimal"); (Atom v)]
+    | `BigInt v -> List [(Atom "bigint"); (Atom v)]
+    | `Tag (Some prefix, v, form) -> List [(Atom "keyword"); (Atom (prefix ^ "/" ^ v)); (sexp_of_t form)]
+    | `Tag (None, v, form) -> List [(Atom "keyword"); (Atom v); (sexp_of_t form)]
+    | `String v -> List [(Atom "string"); (Atom v)]
+    | `Int v -> List [(Atom "int"); (Atom (string_of_int v))]
+    | `Float v -> List [(Atom "int"); (Atom (string_of_float v))]
+    | `Bool v -> List [(Atom "bool"); (Atom (string_of_bool v))]
+    | `Null -> List [(Atom "null")]
 end

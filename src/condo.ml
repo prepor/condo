@@ -4,11 +4,11 @@ open Cmdliner
 
 module A = Async.Std
 
-let start endpoints docker_config consul_config advertiser_config =
+let start endpoints docker_config consul_config advertiser_config envs =
   Gc.tune ~max_overhead:0 ~space_overhead:10 ();
   Random.self_init ();
   (* FIXME host of deployer should be customizable *)
-  System.start ~endpoints:endpoints ~docker_config ~consul_config ~advertiser_config
+  System.start ~endpoints:endpoints ~docker_config ~consul_config ~advertiser_config ~envs
   |> A.don't_wait_for;
   (* 30 min? it should be configurable or we should excplicit about it in
      documentation *)
@@ -81,6 +81,10 @@ let advertise =
   in
   Term.(const advertise' $ is_start $ tags $ prefix)
 
-let condo_t = Term.(const start $ endpoints $ docker $ consul $ advertise $ setup_log)
+let envs =
+  let doc = "Environment variables which will be added to every spec" in
+  Arg.(value & opt_all (pair ~sep:'=' string string) [] & info ["env"] ~doc ~docv:"ENV")
+
+let condo_t = Term.(const start $ endpoints $ docker $ consul $ advertise $ envs $ setup_log)
 
 let () = match Term.eval (condo_t, info)  with `Error _ -> exit 1 | _ -> exit 0
