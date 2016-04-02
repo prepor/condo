@@ -78,12 +78,10 @@ module Edn : sig
   val sexp_of_t : Edn.t -> Sexp.t
 end
 
-val of_exn : Exn.t -> string
-
 val random_str : int -> string
-
-val exn_to_string : exn -> string
 
 val err_result_to_exn : ('a, Error.t) Result.t -> ('a, exn) Result.t
 
 val yojson_to_result : [`Error of string | `Ok of 'a] -> ('a, exn) Result.t
+
+val failure : ('a, unit, string, exn) Core.Std.format4 -> 'a

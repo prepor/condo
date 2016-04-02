@@ -65,10 +65,10 @@ let loop ~id ~prefix ~consul ~service ~advertisements =
   let tick (name, body) =
     Consul.put consul ~path:(path id prefix name) ~body ?session:None >>| function
     | Ok () -> ()
-    | Error err -> L.error "Error while putting advertising value: %s" (Utils.of_exn err) in
+    | Error err -> L.error "Error while putting advertising value: %s" (Exn.to_string err) in
   Pipe.iter advertisements tick >>= fun () ->
   Consul.deregister_service consul service >>| function
-  | Error exn -> L.error "Error while deregister advertiser: %s" (Utils.of_exn exn)
+  | Error exn -> L.error "Error while deregister advertiser: %s" (Exn.to_string exn)
   | Ok () -> ()
 
 let wait_service consul service =

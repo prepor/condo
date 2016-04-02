@@ -3,8 +3,6 @@ open Async.Std
 
 module A = Async.Std
 
-let of_exn exn = exn |> sexp_of_exn |> Sexp.to_string_hum
-
 let random_str length =
   let buf = Bigbuffer.create length in
   let gen_char () = (match Random.int(26 + 26 + 10) with
@@ -17,8 +15,6 @@ let random_str length =
   done;
   Bigbuffer.contents buf
 
-let exn_to_string exn = exn |> sexp_of_exn |> Sexp.to_string_hum
-
 let err_result_to_exn = function
   | Ok res -> Ok res
   | Error e -> Error (Error.to_exn e)
@@ -26,6 +22,9 @@ let err_result_to_exn = function
 let yojson_to_result = function
   | `Ok v -> Ok v
   | `Error s -> Error (Failure s)
+
+let failure fmt =
+  ksprintf (fun msg -> (Failure msg)) fmt
 
 module Yojson_assoc = struct
   module String = struct
@@ -99,7 +98,7 @@ module HTTP = struct
 
     let do_req uri res = try_with res >>=? not_200_as_error >>= function
       | Error err ->
-        L.error "Request %s failed: %s" (Uri.to_string uri) (of_exn err);
+        L.error "Request %s failed: %s" (Uri.to_string uri) (Exn.to_string err);
         Error err |> return
       | Ok (resp, body) ->
         L.debug "Request %s success: %s"

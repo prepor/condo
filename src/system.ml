@@ -79,14 +79,9 @@ let start ~advertiser_config ~consul_config ~docker_config ~endpoints ~envs =
   let docker = start_docker docker_config in
   let%map advertiser = start_advertiser consul advertiser_config in
   let stop_supervisor = start_supervisor ~docker ~advertiser ~consul ~endpoints ~envs in
-  (match advertiser with
-   | Some v -> Shutdown.at_shutdown (fun () -> Advertiser.stop v)
-   | None -> ());
-  Shutdown.at_shutdown stop_supervisor;
-
-  (*   >>= fun advertiser -> *)
-  (*   let stopper = Deployer.start ~name:"test" ~consul ~docker *)
-  (*       ~host:(Docker.host docker) ~watcher ~advertiser in *)
-  (*   A.Shutdown.at_shutdown stopper *)
-
-  ()
+  let stop () =
+    stop_supervisor () >>= fun () ->
+    (match advertiser with
+     | Some v -> Advertiser.stop v
+     | None -> return ()) in
+  Shutdown.at_shutdown stop

@@ -168,7 +168,7 @@ let rename_old_container t spec =
               |> fun uri -> Uri.add_query_param' uri ("name", new_name) in
     Utils.HTTP.post uri ~parser:Fn.ignore >>| function
     | Error err ->
-      L.error "Renaming error (it can be ok) of %s: %s" n (Utils.of_exn err);
+      L.error "Renaming error (it can be ok) of %s: %s" n (Exn.to_string err);
       Ok ();
     | Ok () -> Ok ()
 

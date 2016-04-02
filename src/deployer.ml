@@ -78,7 +78,7 @@ module Watchers = struct
     (stopper, value)
 
   let stop t =
-    Deferred.List.iter t (fun f -> f ())
+    Deferred.List.iter ~how:`Parallel t ~f:(fun f -> f ()) |> don't_wait_for
 
   let apply t edn =
     let keys = find t edn in
@@ -87,11 +87,13 @@ module Watchers = struct
     let values = List.map watchers snd in
     with_timeout (Time.Span.of_int_sec 10) (Deferred.List.all values) >>= function
     | `Timeout ->
-      stop stoppers >>| fun () ->
-      Error (Failure "Timeout while waiting watchers")
+      stop stoppers;
+      Error (Failure "Timeout while waiting watchers") |> return
     | `Result l ->
       Result.all l |> (function
-          | Error exn -> Error (Exn.Reraised ("Error in watcher", exn)) |> return
+          | Error exn ->
+            stop stoppers;
+            Error (Exn.Reraised ("Error in watcher", exn)) |> return
           | Ok values -> Ok (stoppers, (replace edn values)) |> return)
 
 end
@@ -118,7 +120,8 @@ module Discoveries = struct
     | ([], false) -> None
 
   let discovery_to_env spec v =
-    Option.value_exn (discovery_to_env' spec v)
+    Result.of_option (discovery_to_env' spec v)
+      ~error:(Utils.failure "Can't resolve dependency %s" spec.Spec.Discovery.service)
 
   let start_discovery t spec =
     let {Spec.Discovery.tag; service; watch} = spec in
@@ -136,18 +139,22 @@ module Discoveries = struct
     (stopper, value)
 
   let stop t =
-    Deferred.List.iter t (fun f -> f ())
-
+    Deferred.List.iter ~how:`Parallel t ~f:(fun f -> f ()) |> don't_wait_for
+    
   let apply t spec =
     let discoveries = List.map spec.Spec.discoveries (start_discovery t) in
     let stoppers = List.map discoveries fst in
     let values = List.map discoveries snd in
     with_timeout (Time.Span.of_int_sec 10) (Deferred.List.all values) >>= function
     | `Timeout ->
-      stop stoppers >>| fun () ->
-      Error (Failure "Timeout while waiting discoveries")
+      stop stoppers;
+      Error (Failure "Timeout while waiting discoveries") |> return
     | `Result l ->
-      Ok (stoppers, merge_envs_to_spec spec l) |> return
+      Result.all l |> (function
+          | Error exn ->
+            stop stoppers;
+            Error (Exn.Reraised ("Error with discovery", exn)) |> return
+          | Ok values -> Ok (stoppers, merge_envs_to_spec spec values) |> return)
 
 
 end
@@ -189,7 +196,7 @@ let stable_watcher t container services =
     | `Closed -> return ()
     | `Pass -> Pipe.write t.events Stable
     | `Error err ->
-      L.error "[%s] Error while stable watching: %s" t.name (Utils.exn_to_string err);
+      L.error "[%s] Error while stable watching: %s" t.name (Exn.to_string err);
       Pipe.write t.events NotStable in
   stable_watcher' |> don't_wait_for;
   closer
@@ -244,12 +251,12 @@ let prepare_device mapping (volume, device) =
   let try_to_prepare () =
     match prepare_command with
     | Some (prog :: args) -> Process.run ~prog ~args () |> run'
-    | Some [] -> Error (Failure (sprintf "Invalid prepare_command for %s device" path)) |> return
+    | Some [] -> Error (Utils.failure "Invalid prepare_command for %s device" path) |> return
     | None -> Ok () |> return in
   let try_to_mount () =
     match mount_command with
     | Some (prog :: args) -> Process.run ~prog:prog ~args:args () |> run'
-    | Some [] -> Error (Failure (sprintf "Invalid mount_command for %s device" path)) |> return
+    | Some [] -> Error (Utils.failure "Invalid mount_command for %s device" path) |> return
     | None -> Process.run ~prog:"mount" ~args:[path; from] () |> run' in
   let mount_it () =
     if check_mount () then return (Ok ())
@@ -294,18 +301,18 @@ let parse_spec t edn =
   | `Ok spec when validate_stop_strategy spec ->
     Ok (spec, watchers) |> return
   | `Ok _ ->
-    Watchers.stop watchers |> don't_wait_for;
+    Watchers.stop watchers;
     Error (Failure "Invalid spec: stop strategy \"After\" is not allowed for services with \"host_port\"")
     |> return
   | `Error err ->
-    Watchers.stop watchers |> don't_wait_for;
+    Watchers.stop watchers;
     Error (Failure ("Error in parsing spec: " ^ err)) |> return
 
 (* We just ignore fails in stop action *)
 let stop t ?(timeout=0) deploy =
   deploy.stop_checks ();
-  Discoveries.stop deploy.discoveries >>= fun () ->
-  Watchers.stop deploy.watchers >>= fun () ->
+  Discoveries.stop deploy.discoveries;
+  Watchers.stop deploy.watchers;
   deregister_services t deploy >>= fun () ->
   after (Time.Span.of_int_sec timeout) >>= fun () ->
   L.info "[%s] Stop container %s"
@@ -317,7 +324,7 @@ let stop t ?(timeout=0) deploy =
   | Error err ->
     L.error "[%s]Error in stopping of deploy %s, container %s:\n%s"
       t.name
-      (spec_label deploy.spec) (Docker.container_to_string deploy.container) (Utils.of_exn err);
+      (spec_label deploy.spec) (Docker.container_to_string deploy.container) (Exn.to_string err);
     return ()
   | Ok _ ->
     return ()
@@ -331,8 +338,8 @@ let new_deploy t edn prev_deploy stop_before_start =
   match (spec', prev_deploy) with
   | (spec, Some prev_deploy) when spec = prev_deploy.spec ->
     L.info "[%s] Specs are same" t.name;
-    Watchers.stop watchers >>= fun () ->
-    Discoveries.stop discoveries >>= fun () ->
+    Watchers.stop watchers;
+    Discoveries.stop discoveries;
     Ok prev_deploy |> return
   | _ ->
     (match (stop_before_start, prev_deploy) with
@@ -344,8 +351,8 @@ let new_deploy t edn prev_deploy stop_before_start =
     Docker.start t.docker spec' >>=? fun (container, ports) ->
     register_services t spec' container ports >>= function
     | Error err ->
-      Watchers.stop watchers >>= fun () ->
-      Discoveries.stop discoveries >>= fun () ->
+      Watchers.stop watchers;
+      Discoveries.stop discoveries;
       (Docker.stop t.docker container >>= fun _ -> Error err |> return)
     | Ok services ->
       Ok { spec = spec';
@@ -522,7 +529,7 @@ let started_try_again t deploy edn =
   started_after t deploy edn
 
 let unexpected t state e =
-  L.error "[%s] Unexpected event in % state:\n%s" t.name state (sexp_of_event e |> Sexp.to_string_hum)
+  L.error "[%s] Unexpected event in %s state:\n%s" t.name state (sexp_of_event e |> Sexp.to_string_hum)
 
 let apply t = function
   | Init -> (function

@@ -94,13 +94,13 @@ let requests_loop parser uri monitor w =
         L.error "Consul watcher %s: none index, try again" uri_s;
         try_again ()
       | `ParsingError (index', err) ->
-        L.error "Consul watcher %s: parsing error, try again" (Utils.of_exn err);
+        L.error "Consul watcher %s: parsing error, try again" (Exn.to_string err);
         loop last_res (Some index')
       | `BadStatus status ->
         L.error "Consul watcher %s: bad status %s, try again" uri_s (Cohttp.Code.string_of_status status);
         try_again ()
       | `ConnectionError exn ->
-        L.error "Consul watcher %s: connection error %s, try again\n" uri_s (Utils.of_exn exn);
+        L.error "Consul watcher %s: connection error %s, try again\n" uri_s (Exn.to_string exn);
         try_again ()
     else RM.completed monitor |> return in
   loop None None
