@@ -1,3 +1,9 @@
+## 0.9.1
+
+BUGFIXES
+  
+  * Monitoring now works with condo 0.9.0
+
 ## 0.9.0
 
 FEATURES
