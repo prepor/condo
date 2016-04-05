@@ -1,3 +1,17 @@
+## 0.9.0
+
+FEATURES
+
+  * Specs in edn instead of json
+  * Watchers in specs
+  * Multiple and prefix endpoints. condo instance now can deploy multiple specs
+  * Now you can pass envs via cmdline on start. They will be merged to every spec on deploy
+  
+BUILD:
+  
+  * Got rid of oasis. Just plain ocamlbuild and makefile
+  * Dependencies described via opam switch file
+
 ## 0.8.0
 
 FEATURES:
