@@ -16,7 +16,7 @@ type t = {
 }
 
 let path id prefix name =
-  Filename.concat prefix (id ^ "_" ^ name)
+  Filename.concat prefix ("condo_" ^ id ^ "/" ^ name)
 
 let init t name =
   Consul.put t.consul ~path:(path t.id t.prefix name) ~session:t.session ~body:""

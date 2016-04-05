@@ -9,6 +9,7 @@ true: package(core),\
       package(ppx_deriving.std),\
       package(ppx_deriving_yojson),\
       package(ppx_sexp_conv),\
+      package(ppx_compare),\
       package(ppx_let)
 
 <condo/condo.*>: package(cmdliner), package(ppx_getenv)

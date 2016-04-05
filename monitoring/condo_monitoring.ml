@@ -32,7 +32,7 @@ let monitoring =
   let prefix =
     let doc = "Keys prefix in Consul's KV with state data" in
     let env = Arg.env_var "PREFIX" ~doc in
-    Arg.(value & opt string "condo" & info ["prefix"] ~env ~doc) in
+    Arg.(value & opt string "/condo" & info ["prefix"] ~env ~doc) in
   let tag =
     let doc = "Tag to filter condo services" in
     let env = Arg.env_var "TAG" ~doc in

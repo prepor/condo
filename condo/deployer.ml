@@ -623,4 +623,7 @@ let start ~name ~consul ~docker ~watcher ~advertiser ~envs =
   let worker = worker t r in
   (fun () ->
      Pipe.write t.events Stop >>= fun () ->
+     (match advertiser with
+      | None -> return ()
+      | Some advertiser -> Advertiser.forget advertiser name) >>= fun () ->
      worker)
