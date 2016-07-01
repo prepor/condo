@@ -226,6 +226,7 @@ module RegisterService = struct
   type check = {
     script: string option [@key "Script"];
     http: string option [@key "HTTP"];
+    tcp: string option [@key "TCP"];
     interval: string [@key "Interval"];
   } [@@deriving yojson, show]
   type t = {
@@ -245,12 +246,16 @@ let register_service t ?(id_suffix="") spec template_vars port =
         Mustache.render template json) in
   let make_http_path path =
     (sprintf "http://%s:%i%s" (List.Assoc.find template_vars "host" |> Option.value ~default:"") port path) in
+  let make_tcp =
+    (sprintf "%s:%i" (List.Assoc.find template_vars "host" |> Option.value ~default:"") port) in
   let {Spec.Service.name; check; tags} = spec in
   let check' = Spec.Check.(match check.method_ with
-      | Http v -> Result.(apply_template v >>| (fun v' -> (None, Some v')))
-      | Script v -> Result.(apply_template v >>| (fun v' -> (Some v', None)))
-      | HttpPath v -> Ok (None, Some (make_http_path v))) in
-  let register_service' (script, http) =
+      | Http v -> Result.(apply_template v >>| (fun v' -> (None, Some v', None)))
+      | Script v -> Result.(apply_template v >>| (fun v' -> (Some v', None, None)))
+      | HttpPath v -> Ok (None, Some (make_http_path v), None)
+      | Tcp v -> Result.(apply_template v >>| (fun v' -> (None, None, Some v')))
+      | TcpPort -> Ok (None, None, Some (make_tcp))) in
+  let register_service' (script, http, tcp) =
     let uri = make_uri t "/v1/agent/service/register" in
     let {Spec.Check.interval} = check in
     let id = name ^ "_" ^ id_suffix in
@@ -262,6 +267,7 @@ let register_service t ?(id_suffix="") spec template_vars port =
                 check = { RegisterService.
                           script = script;
                           http = http;
+                          tcp = tcp;
                           interval = Time.Span.(interval |> of_int_sec |> to_short_string)}} in
     let body = RegisterService.to_yojson req |> Yojson.Safe.to_string in
     L.info "Register service %s on port %i" id port;

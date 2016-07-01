@@ -32,7 +32,7 @@ module Volume = struct
   type t = {
     from : string;
     to_ : string [@key "to"];
-    device : device option
+    device : device option [@default None];
   } [@@deriving yojson, show]
 end
 
@@ -47,6 +47,8 @@ module Check = struct
   type method_ = Http of string
                | Script of string
                | HttpPath of string
+               | Tcp of string
+               | TcpPort
     [@@deriving yojson, show]
   type t = {
     method_ : method_ [@key "method"];
