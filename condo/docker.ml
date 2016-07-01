@@ -61,6 +61,7 @@ let make_uri ?(query_params = []) t path =
   (Uri.with_path t.endpoint path |> Uri.with_query') query_params
 
 let pull_image t image =
+  Spec.Image.(L.info "Pulling image %s:%s" image.name image.tag);
   let error_checker s =
     let stream = Yojson.Basic.stream_from_string s in
     let rec check () =
@@ -83,6 +84,7 @@ let pull_image t image =
                 |> Option.value ~default: (Cohttp.Header.init ()) in
   let do_req () = Client.post ~headers uri in
   try_with do_req >>=? Utils.HTTP.not_200_as_error >>=? fun (resp, body) ->
+  Spec.Image.(L.info "Image pulled %s:%s" image.name image.tag);
   (CA.Body.to_string body >>| error_checker)
 
 let receive_image_id t image =

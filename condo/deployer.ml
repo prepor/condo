@@ -140,7 +140,7 @@ module Discoveries = struct
 
   let stop t =
     Deferred.List.iter ~how:`Parallel t ~f:(fun f -> f ()) |> don't_wait_for
-    
+
   let apply t spec =
     let discoveries = List.map spec.Spec.discoveries (start_discovery t) in
     let stoppers = List.map discoveries fst in
@@ -337,7 +337,7 @@ let new_deploy t edn prev_deploy stop_before_start =
   let spec' = merge_envs_to_spec spec' t.envs in
   match (spec', prev_deploy) with
   | (spec, Some prev_deploy) when spec = prev_deploy.spec ->
-    L.info "[%s] Specs are same" t.name;
+    L.info "[%s] New spec is same as the current one, so we will not deploy it" t.name;
     Watchers.stop watchers;
     Discoveries.stop discoveries;
     Ok prev_deploy |> return
