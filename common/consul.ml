@@ -130,7 +130,7 @@ let parse_kv_recurse_body body =
   let open Result in
   try_with (fun () -> Yojson.Safe.from_string body)
   >>= fun body ->
-  KvBody.t_list_of_yojson body |> Utils.yojson_to_result
+  KvBody.t_list_of_yojson body |> Utils.str_err_to_exn
   >>| fun l ->
   List.map l ~f:(fun ({KvBody.value} as v) ->
       KvBody.{v with value = Utils_base64.decode value})
@@ -194,7 +194,7 @@ let parse_catalog_service body =
   let open Result in
   try_with (fun () -> Yojson.Safe.from_string body)
   >>= fun body ->
-  CatalogService.t_list_of_yojson body |> Utils.yojson_to_result
+  CatalogService.t_list_of_yojson body |> Utils.str_err_to_exn
   >>| fun v ->
   List.map v ~f:(function {CatalogService.id} as s -> (id, s))
 
@@ -216,7 +216,7 @@ let parse_catalog_node body =
   let open Result in
   try_with (fun () -> Yojson.Safe.from_string body)
   >>= fun body ->
-  CatalogNode.t_list_of_yojson body |> Utils.yojson_to_result
+  CatalogNode.t_list_of_yojson body |> Utils.str_err_to_exn
 
 let catalog_nodes t =
   let uri = make_uri t "/v1/catalog/nodes" in

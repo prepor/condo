@@ -30,7 +30,7 @@ let forget t name =
 
 let start_service () =
   let callback ~body _a req =
-    if (Uri.path req.HTTP.Request.uri) = "/gc" then
+    if (Uri.path (HTTP.Request.uri req)) = "/gc" then
       (print_endline "Gc!";
        Gc.full_major ());
     Server.respond_with_string ~code:`OK "Condo is alive!\n" in

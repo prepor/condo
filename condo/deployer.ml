@@ -298,13 +298,13 @@ let parse_spec t edn =
   >>=? fun (watchers, edn') ->
   let yojson = edn' |> Edn.Json.to_json in
   Spec.of_yojson (yojson :> Yojson.Safe.json) |> function
-  | `Ok spec when validate_stop_strategy spec ->
+  | Ok spec when validate_stop_strategy spec ->
     Ok (spec, watchers) |> return
-  | `Ok _ ->
+  | Ok _ ->
     Watchers.stop watchers;
     Error (Failure "Invalid spec: stop strategy \"After\" is not allowed for services with \"host_port\"")
     |> return
-  | `Error err ->
+  | Error err ->
     Watchers.stop watchers;
     Error (Failure ("Error in parsing spec: " ^ err)) |> return
 
@@ -448,7 +448,7 @@ let waiting_next_redeploy t current next edn =
     Started current
 
 let waiting_next_new_spec t current next edn =
-  L.info "[%s] New spec was received while we have two different deploys. We are waiting for green health checks for the last one, while the first one is stable. We will stop the last one and will try to deploy this new spec" t.name;
+  L.info "[%s] New spec was received while we have two different deploys. We are waiting for green health checks for the last one, while the first one is stable. We will stop the last one and will try to deploy this  new spec" t.name;
   waiting_next_redeploy t current next edn
 
 let waiting_next_stop t current next =

@@ -19,9 +19,9 @@ let err_result_to_exn = function
   | Ok res -> Ok res
   | Error e -> Error (Error.to_exn e)
 
-let yojson_to_result = function
-  | `Ok v -> Ok v
-  | `Error s -> Error (Failure s)
+let str_err_to_exn = function
+  | Ok v -> Ok v
+  | Error s -> Error (Failure s)
 
 let failure fmt =
   ksprintf (fun msg -> (Failure msg)) fmt
