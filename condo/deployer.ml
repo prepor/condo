@@ -38,9 +38,11 @@ let merge_envs_to_spec spec envs =
 module Watchers = struct
   type t = (unit -> unit Deferred.t) list
 
+  type kind = Edn | String
+
   let replace (v : Edn.t) values =
     let rec f = function
-      | `Tag (Some "condo", "watcher", `String key) ->
+      | `Tag (Some "condo", s, `String key) when s = "watcher" || s = "watcher-string" ->
         List.Assoc.find_exn values key
       | `Assoc xs -> `Assoc (List.map xs (fun (v1, v2) -> ((f v1), (f v2))))
       | `List xs -> `List (List.map xs f)
@@ -52,9 +54,11 @@ module Watchers = struct
   let find t (v : Edn.t) =
     let rec find acc = function
       | `Tag ((Some "condo"), "watcher", (`String v)) ->
-        v::acc
-      | `Tag ((Some "condo"), "watcher", v) ->
-        L.error "[%s] Bad formed watcher: %s" t.name (Edn.to_string v);
+        (v, Edn)::acc
+      | `Tag ((Some "condo"), "watcher-string", (`String v)) ->
+        (v, String)::acc
+      | `Tag ((Some "condo"), k, v) ->
+        L.error "[%s] Bad formed tag %s: %s" t.name k (Edn.to_string v);
         acc
       | `Assoc ((v1, v2)::xs) ->
         find [] v1 @ find [] v2 @ find [] (`Assoc xs) @ acc
@@ -62,12 +66,16 @@ module Watchers = struct
       | other -> acc in
     find [] v
 
-  let start_watcher t key =
-    let parse value = Result.try_with (fun () -> Edn.from_string value) |> function
+  let start_watcher t (key, kind) =
+    let parse_edn value = Result.try_with (fun () -> Edn.from_string value) |> function
       | Ok value -> Ok value
       | Error exn ->
         Error (Failure (sprintf "Can't parse value of watcher %s: %s" key (Exn.to_string exn))) in
     let (consul_watcher, stopper) = Consul.key t.consul key in
+    let parse v =
+      match kind with
+      | Edn -> parse_edn v
+      | String -> Ok (`String v) in
     let value = Pipe.read consul_watcher >>| function
       | `Eof -> assert false
       | `Ok v ->

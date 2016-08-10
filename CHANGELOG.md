@@ -1,3 +1,8 @@
+## 0.9.3
+
+FEATURES:
+  * condo/watcher-string tag in specs
+
 ## 0.9.2
 
 FEATURES:
