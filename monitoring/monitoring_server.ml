@@ -58,7 +58,7 @@ let handler monitoring ui_path request =
   (* ; "/v1/sse/watch", watch_handler *)
   ; "/v1/snapshot", snapshot_handler monitoring
   ] in
-  let uri = request.HTTP.Request.uri in
+  let uri = HTTP.Request.uri request in
   match Dispatch.DSL.dispatch table (Uri.path uri) with
   | Result'.Ok handler -> handler request
   | Result'.Error _ -> Server.respond_with_string ~code:`Not_found "Not found"
