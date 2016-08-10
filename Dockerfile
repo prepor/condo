@@ -1,12 +1,11 @@
 FROM prepor/ocaml:4.02.3
 
-RUN apt-get update && apt-get install -y build-essential git pkg-config
+RUN apt-get update && apt-get install -y build-essential git pkg-config libssl-dev
 
 ADD opam.switch /opam.switch
 
 RUN eval `opam config env` && \
     opam update && \
-    opam pin add edn https://github.com/prepor/ocaml-edn.git && \
     opam switch import /opam.switch
 
 ADD . /opt/condo
