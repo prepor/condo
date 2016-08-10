@@ -1,3 +1,12 @@
+## 0.9.2
+
+FEATURES:
+  * Reloadable (by HUP signal) docker auth config (thanks to @little-arhat)
+  * TCP health checker
+
+BUILD:
+  * Updated dependencies
+
 ## 0.9.1
 
 BUGFIXES
