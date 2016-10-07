@@ -1,0 +1,7 @@
+description = "Reactive docker"
+version = "%%VERSION_NUM%%"
+requires = ""
+archive(byte) = "condo.cma"
+archive(native) = "condo.cmxa"
+plugin(byte) = "condo.cma"
+plugin(native) = "condo.cmxs"
