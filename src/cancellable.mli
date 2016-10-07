@@ -24,6 +24,7 @@ val worker : ?timeout:int -> tick:('b -> ([`Complete of 'a | `Continue of 'b], '
 type 'a choice = Choice : ('c, unit) t * ('c -> 'a) -> 'a choice
 
 val choice : ('c, unit) t -> ('c -> 'a) -> 'a choice
+val (-->) : ('c, unit) t -> ('c -> 'a) -> 'a choice
 
 (* TODO cancelable variant of choose *)
 val choose : 'a choice list -> 'a Deferred.t

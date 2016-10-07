@@ -44,6 +44,7 @@ let choose l =
   res
 
 let choice t f = Choice (t, f)
+let ( --> ) t f = Choice (t, f)
 
 module M = struct
   type ('a,'b) parent = ('a, 'b) t

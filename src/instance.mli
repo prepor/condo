@@ -2,7 +2,20 @@ open! Core.Std
 open! Async.Std
 
 type t
-type snapshot [@@deriving sexp]
+
+type container = {
+  id : Docker.id;
+  spec : Spec.t
+} [@@deriving sexp]
+
+type snapshot = | Init
+                | Wait of container
+                | TryAgain of (Spec.t * float)
+                | Stable of container
+                | WaitNext of (container * container)
+                | TryAgainNext of (container * Spec.t * float)
+[@@deriving sexp]
+
 
 val parse_snapshot : Sexp.t -> (snapshot, string) Result.t
 

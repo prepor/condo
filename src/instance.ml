@@ -39,6 +39,7 @@ let read_new_spec path current =
 let try_again_at () =
   Time.(add (now ()) (Span.of_int_sec 10) |> to_epoch)
 
+(* FIXME error handling *)
 let apply system spec_path snapshot control =
   let docker = System.docker system in
   let control' = Cancellable.defer control in
@@ -76,24 +77,31 @@ let apply system spec_path snapshot control =
 
   (* State choices *)
   let init_choices () =
-    [C.choice (read_spec spec_path) wait_or_try_again;] in
+    let open Cancellable in
+    let spec = (read_spec spec_path) in
+    [spec --> wait_or_try_again;] in
   let wait_choices container =
     let timeout = container.spec.Spec.health_timeout in
-    [C.choice (read_new_spec spec_path container.spec)
-       (fun spec ->
-          docker_stop container >>= fun () ->
-          wait_or_try_again spec);
-     C.choice (Docker.wait_healthchecks docker container.id ~timeout |> C.defer) (function
-       | `Passed -> `Continue (Stable container) |> return
-       | `Not_passed -> `Continue (TryAgain (container.spec, try_again_at ()))
-                        |> return)] in
+    let new_spec = (read_new_spec spec_path container.spec) in
+    let health_check = (Docker.wait_healthchecks docker container.id ~timeout |> C.defer) in
+    let stop_and_start spec =
+      let%bind () = docker_stop container in
+      wait_or_try_again spec in
+    Cancellable.([new_spec --> stop_and_start;
+                  health_check --> (function
+                    | `Passed -> `Continue (Stable container) |> Deferred.return
+                    | `Not_passed -> `Continue (TryAgain (container.spec, try_again_at ()))
+                                     |> Deferred.return)]) in
   let try_again_choices spec at =
-    [C.choice (read_new_spec spec_path spec) wait_or_try_again;
-     C.choice (Clock.at (Time.of_epoch at) |> C.defer) (fun () ->
-         wait_or_try_again spec)] in
+    let open Cancellable in
+    let new_spec = (read_new_spec spec_path spec) in
+    let timeout = (Clock.at (Time.of_epoch at) |> C.defer) in
+    [new_spec --> wait_or_try_again;
+     timeout --> (fun () -> wait_or_try_again spec)] in
   let stable_choices container =
-    Cancellable.
-      [choice (read_new_spec spec_path container.spec) (wait_next_or_try_again container)] in
+    let new_spec = (read_new_spec spec_path container.spec) in
+    Cancellable.[
+      new_spec --> (wait_next_or_try_again container)] in
   let wait_next_choices stable next =
     let timeout = next.spec.Spec.health_timeout in
     [C.choice (read_new_spec spec_path next.spec)
@@ -122,9 +130,11 @@ let apply system spec_path snapshot control =
        | `Not_passed -> `Continue (TryAgainNext (stable, next.spec, try_again_at ()))
                         |> return)] in
   let try_again_next_choices stable spec at =
-    [C.choice (read_new_spec spec_path spec) (wait_next_or_try_again stable);
-     C.choice (Clock.at (Time.of_epoch at) |> C.defer) (fun () ->
-         wait_or_try_again spec)] in
+    let new_spec = (read_new_spec spec_path spec) in
+    let timeout = (Clock.at (Time.of_epoch at) |> C.defer) in
+    Cancellable.[
+      new_spec --> (wait_next_or_try_again stable);
+      timeout --> (fun () -> wait_or_try_again spec)] in
   let apply_choices choices =
     C.choose (C.choice control' (function
       | Stop -> stop snapshot
@@ -141,7 +151,9 @@ let apply system spec_path snapshot control =
   | TryAgainNext (stable, spec, at) -> try_again_next_choices stable spec at in
   let%bind res = apply_choices choices in
   let snapshot' = match res with | `Continue v | `Complete v -> v in
-  let%map () = System.place_snapshot system ~name ~snapshot:(snapshot' |> sexp_of_snapshot) in
+  let%map () =
+    Logs.info (fun m -> m "[%s] New state: %s" name (snapshot' |> sexp_of_snapshot |> Sexp.to_string_hum));
+    System.place_snapshot system ~name ~snapshot:(snapshot' |> sexp_of_snapshot) in
   res
 
 let parse_snapshot data =

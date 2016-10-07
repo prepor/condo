@@ -80,7 +80,6 @@ let wait_healthchecks t id ~timeout =
   let tick () =
     let%map res = Async_http.(request_of_addr t.endpoint
                               |> path (sprintf "/containers/%s/json" id)
-                              (* |> not_persistent *)
                               |> parser (fun v ->
                                   let open Yojson.Basic in
                                   let json = from_string v in
@@ -100,9 +99,11 @@ let wait_healthchecks t id ~timeout =
         else `Continue () in
   let wrapped () = tick () |> Cancellable.defer_wait in
   Cancellable.(
+    let passing_waiter = worker ~timeout:500 ~tick:wrapped () in
+    let timeout = after (Time.Span.of_int_sec timeout) |> defer in
     choose [
-      choice (worker ~timeout:500 ~tick:wrapped ()) (fun () -> `Passed);
-      choice ((after (Time.Span.of_int_sec timeout)) |> defer) (fun () -> `Not_passed);
+      passing_waiter --> (fun () -> `Passed);
+      timeout --> (fun () -> `Not_passed);
     ])
 
 let auth_headers t image =
