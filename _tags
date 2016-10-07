@@ -14,5 +14,7 @@ true: package(core),\
 
 <condo/condo.*>: package(cmdliner), package(ppx_getenv)
 
+<test/*>: package(ounit)
+
 <monitoring/*>: package(dispatch)
 <monitoring/condo_monitoring.*>: package(cmdliner), package(ppx_getenv)

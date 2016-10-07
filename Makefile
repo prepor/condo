@@ -1,5 +1,4 @@
-
-OCB_FLAGS = -tag bin_annot -use-ocamlfind -tag thread -I common
+OCB_FLAGS = -use-ocamlfind -tag thread -I common
 OCB = ocamlbuild $(OCB_FLAGS)
 
 condo:
@@ -14,4 +13,7 @@ monitoring:
 monitoring_native:
 	$(OCB) -I monitoring condo_monitoring.native
 
-.PHONY: condo condo_native monitoring monitoring_native
+test: condo
+	$(OCB) -I test test.byte && ./test.byte
+
+.PHONY: condo condo_native monitoring monitoring_native test
