@@ -5,7 +5,7 @@ open! Import
 module S = System
 
 let system () =
-  let%bind () = Unix.unlink "/tmp/condo_state" in
+  let%bind () = try_with (fun () -> Unix.unlink "/tmp/condo_state") in
   System.create
     ~docker_endpoint:(`Inet ("localhost", 2375))
     ~docker_config:None

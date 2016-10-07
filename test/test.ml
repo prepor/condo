@@ -6,9 +6,10 @@
 open! Core.Std
 open! Async.Std
 
-open Cancellable_test
-open System_test
-open Docker_test
+(* open Cancellable_test *)
+(* open System_test *)
+(* open Docker_test *)
+open Instance_test
 
 (* let () = *)
 (*   let f = (Writer.to_formatter (Lazy.force Writer.stdout)) in *)
