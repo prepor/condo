@@ -137,8 +137,12 @@ let apply system spec_path snapshot control =
       timeout --> (fun () -> wait_or_try_again spec)] in
   let apply_choices choices =
     C.choose (C.choice control' (function
-      | Stop -> stop snapshot
-      | Suspend -> return (`Complete snapshot))
+      | Stop ->
+          Logs.info (fun m -> m "[%s] Stop" name);
+          stop snapshot
+      | Suspend ->
+          Logs.info (fun m -> m "[%s] Suspend" name);
+          return (`Complete snapshot))
               ::choices)
     |> Deferred.join in
 
@@ -173,6 +177,8 @@ let actualize_snapshot snapshot =
   return snapshot
 
 let create system ~spec ~snapshot =
+  Logs.info (fun m -> m "New instance from %s with state %s" spec
+                (Sexp.to_string_hum @@ sexp_of_snapshot snapshot));
   let tick last_snapshot =
     Cancellable.wrap (apply system spec last_snapshot) in
   let worker =
