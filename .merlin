@@ -1,7 +1,7 @@
-PKG bytes async core logs edn yojson async_http topkg
+PKG bytes async core logs edn yojson async_http topkg ppx_deriving_yojson ppx_sexp_conv ppx_let cmdliner
 S src
 S test
 B _build/**
 
 FLG -short-paths
-FLG -ppx 'ppx-jane -as-ppx -inline-test-lib condo'
+

@@ -1,7 +1,7 @@
 open! Core.Std
 open! Async.Std
 
-type state = (string * Sexp.t) list [@@deriving sexp]
+type state = (string * Yojson.Safe.json) list [@@deriving yojson]
 
 type t = {
   docker : Docker.t;
@@ -10,7 +10,10 @@ type t = {
 }
 
 let read_state state_path =
-  match%map try_with (fun () -> Reader.file_contents state_path >>| Sexp.of_string >>| state_of_sexp) with
+  match%map try_with (fun () -> Reader.file_contents state_path
+                       >>| Yojson.Safe.from_string
+                       >>| state_of_yojson
+                       >>| Result.ok_or_failwith) with
   | Ok v -> v
   | Error e ->
       Logs.info (fun m -> m "Can't read state file, initialized new one");
@@ -25,7 +28,7 @@ let docker {docker} = docker
 
 let place_snapshot t ~name ~snapshot =
   t.state <- List.Assoc.add t.state name snapshot;
-  Writer.save ~fsync:true t.state_path ~contents:(t.state |> sexp_of_state |> Sexp.to_string_hum)
+  Writer.save ~fsync:true t.state_path ~contents:(t.state |> state_to_yojson |> Yojson.Safe.to_string)
 
 let get_snapshot t ~name =
   List.Assoc.find t.state name

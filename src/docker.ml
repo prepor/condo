@@ -14,7 +14,7 @@ type t = {
   mutable config : (string, auth) List.Assoc.t;
 }
 
-type id = string [@@deriving sexp]
+type id = string [@@deriving sexp, yojson]
 
 let load_config_exn config_path =
   let parse_auth v =
@@ -122,7 +122,7 @@ let not_200_as_error res =
   else Error (sprintf "Error while docker request (status %i): %s" status body)
 
 let extract_image spec =
-  Edn.Util.(spec |> member (`Keyword (None, "image")) |> to_string_option)
+  Yojson.Basic.Util.(spec |> member "image" |> to_string_option)
   |> Result.of_option ~error:"Can't find image in spec"
   |> return
 
@@ -159,7 +159,7 @@ let delete_container t name =
   ()
 
 let create_container t name spec =
-  let name' = match Edn.Util.(spec |> member (`Keyword (None, "name")) |> to_string_option) with
+  let name' = match Yojson.Basic.Util.(spec |> member "name" |> to_string_option) with
   | Some v -> v
   | None -> (sprintf "%s_%s" name (Utils.random_str 10)) in
   let%bind () = delete_container t name' in
@@ -167,7 +167,7 @@ let create_container t name spec =
                             |> path "/containers/create"
                             |> query_param "name" name'
                             |> header "Content-Type" "application/json"
-                            |> body (spec |> Edn.Json.to_json |> Yojson.Basic.to_string)
+                            |> body (Yojson.Basic.to_string spec )
                             |> parser (fun v -> Yojson.Basic.(from_string v
                                                               |> Util.member "Id"
                                                               |> Util.to_string))

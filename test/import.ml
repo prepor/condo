@@ -10,6 +10,24 @@ let () =
   (* Logs.set_level (Some Logs.Debug) *)
   Logs.Src.set_level Logs.default (Some Logs.Debug)
 
+type edn = [
+  | `Assoc of (edn * edn) list
+  | `List of edn list
+  | `Vector of edn list
+  | `Set of edn list
+  | `Null
+  | `Bool of bool
+  | `String of string
+  | `Char of string
+  | `Symbol of (string option * string)
+  | `Keyword of (string option * string)
+  | `Int of int
+  | `BigInt of string
+  | `Float of float
+  | `Decimal of string
+  | `Tag of (string option * string * edn) ]
+[@@deriving sexp]
+
 include Condo
 
 let system () =
@@ -19,19 +37,25 @@ let system () =
     ~docker_config:None
     ~state_path:"/tmp/condo_state"
 
-type state = (string * Sexp.t) list [@@deriving sexp]
+let read_state state_path =
+  match%map try_with (fun () -> Reader.file_contents state_path
+                       >>| Yojson.Safe.from_string
+                       >>| System.state_of_yojson
+                       >>| Result.ok_or_failwith) with
+  | Ok v -> v
+  | Error e ->
+      []
 
 let wait_for name snapshot_checker =
   let inspect_state state =
-    match List.Assoc.find (state |> Sexp.of_string |> state_of_sexp) name with
+    match List.Assoc.find state name with
     | Some v ->
-        if snapshot_checker (Instance.snapshot_of_sexp v) then `Complete ()
+        if snapshot_checker (Instance.snapshot_of_yojson v |> Result.ok_or_failwith) then `Complete ()
         else `Continue ()
     | None -> `Continue () in
   let tick () =
-    match%map try_with (fun () -> Reader.file_contents "/tmp/condo_state") with
-    | Ok v -> inspect_state v
-    | Error _ -> `Continue () in
+    let%map state = read_state "/tmp/condo_state" in
+    inspect_state state in
   let wrapped () = tick () |> Cancellable.defer in
   Cancellable.(
     let waiter = worker ~sleep:200 ~tick:wrapped () in
@@ -44,12 +68,12 @@ let wait_for name snapshot_checker =
 let wait_for_image name image spec_extractor =
   let checker snapshot =
     match spec_extractor snapshot with
-    | Some spec -> if image = Edn.Util.(spec.Spec.spec |> member (`Keyword (None, "image")) |> to_string)
+    | Some spec -> if
+      image = Yojson.Basic.Util.(spec.Spec.spec |> member "image" |> to_string)
         then true
         else false
     | None -> false in
   wait_for name checker
-
 
 let wait_for_a_stable name image =
   wait_for_image name image (function

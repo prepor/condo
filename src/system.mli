@@ -9,6 +9,9 @@ val create :
 
 val docker : t -> Docker.t
 
-val place_snapshot : t -> name:string -> snapshot:Sexp.t -> unit Deferred.t
+val place_snapshot : t -> name:string -> snapshot:Yojson.Safe.json -> unit Deferred.t
 
-val get_snapshot : t -> name:string -> Sexp.t option
+val get_snapshot : t -> name:string -> Yojson.Safe.json option
+
+(* For tests only *)
+type state = (string * Yojson.Safe.json) list [@@deriving yojson]

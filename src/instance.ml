@@ -4,7 +4,7 @@ open! Async.Std
 type container = {
   id : Docker.id;
   spec : Spec.t
-} [@@deriving sexp]
+} [@@deriving sexp, yojson]
 
 type snapshot = | Init
                 | Wait of container
@@ -12,7 +12,7 @@ type snapshot = | Init
                 | Stable of container
                 | WaitNext of (container * container)
                 | TryAgainNext of (container * Spec.t * float)
-[@@deriving sexp]
+[@@deriving sexp, yojson]
 
 type control = Stop | Suspend
 
@@ -22,8 +22,12 @@ let read_spec path =
   let tick () =
     (match%map (Spec.from_file path) with
     | Ok v -> `Complete v
+    (* Just for better logging. File absence for small amount of time is
+       legal for us, because supervisor needs some time to detect it and stops
+       instance *)
+    | Error (Unix.Unix_error (Unix.ENOENT, _, _)) -> `Continue ()
     | Error e ->
-        Logs.warn (fun m -> m "Can't read spec from file %s: %s" path e);
+        Logs.warn (fun m -> m "Can't read spec from file %s: %s" path (Exn.to_string e));
         `Continue ())
     |> Cancellable.defer_wait in
   Cancellable.worker ~sleep:1000 ~tick ()
@@ -157,12 +161,10 @@ let apply system spec_path snapshot control =
   let snapshot' = match res with | `Continue v | `Complete v -> v in
   let%map () =
     Logs.info (fun m -> m "[%s] New state: %s" name (snapshot' |> sexp_of_snapshot |> Sexp.to_string_hum));
-    System.place_snapshot system ~name ~snapshot:(snapshot' |> sexp_of_snapshot) in
+    System.place_snapshot system ~name ~snapshot:(snapshot' |> snapshot_to_yojson) in
   res
 
-let parse_snapshot data =
-  Result.try_with (fun () -> snapshot_of_sexp data)
-  |> Result.map_error ~f:Exn.to_string
+let parse_snapshot data = snapshot_of_yojson data
 
 let init_snaphot () = Init
 

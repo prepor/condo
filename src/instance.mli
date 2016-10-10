@@ -14,10 +14,9 @@ type snapshot = | Init
                 | Stable of container
                 | WaitNext of (container * container)
                 | TryAgainNext of (container * Spec.t * float)
-[@@deriving sexp]
+[@@deriving sexp, yojson]
 
-
-val parse_snapshot : Sexp.t -> (snapshot, string) Result.t
+val parse_snapshot : Yojson.Safe.json -> (snapshot, string) Result.t
 
 val init_snaphot : unit -> snapshot
 

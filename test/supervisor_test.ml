@@ -26,13 +26,13 @@ let%expect_test "basic" =
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
-        (spec (Assoc (((Keyword (() image)) (String prepor/condo-test:good)))))
+        (spec (Assoc ((image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
     test.native: [INFO] [spec1] New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
-        (spec (Assoc (((Keyword (() image)) (String prepor/condo-test:good)))))
+        (spec (Assoc ((image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
     test.native: [INFO] New instance from /tmp/condo_specs/spec2.edn with state Init
     test.native: [INFO] Pulling image prepor/condo-test:good
@@ -40,13 +40,13 @@ let%expect_test "basic" =
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
-        (spec (Assoc (((Keyword (() image)) (String prepor/condo-test:good)))))
+        (spec (Assoc ((image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
     test.native: [INFO] [spec2] New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
-        (spec (Assoc (((Keyword (() image)) (String prepor/condo-test:good)))))
+        (spec (Assoc ((image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
     test.native: [INFO] [spec1] Stop
     test.native: [INFO] [spec1] New state: Init
@@ -56,13 +56,13 @@ let%expect_test "basic" =
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
-        (spec (Assoc (((Keyword (() image)) (String prepor/condo-test:good)))))
+        (spec (Assoc ((image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
     test.native: [INFO] [spec1] New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
-        (spec (Assoc (((Keyword (() image)) (String prepor/condo-test:good)))))
+        (spec (Assoc ((image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
     test.native: [INFO] [spec1] Stop
     test.native: [INFO] [spec1] New state: Init
