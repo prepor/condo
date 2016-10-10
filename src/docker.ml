@@ -99,7 +99,7 @@ let wait_healthchecks t id ~timeout =
         else `Continue () in
   let wrapped () = tick () |> Cancellable.defer_wait in
   Cancellable.(
-    let passing_waiter = worker ~timeout:500 ~tick:wrapped () in
+    let passing_waiter = worker ~sleep:500 ~tick:wrapped () in
     let timeout = after (Time.Span.of_int_sec timeout) |> defer in
     choose [
       passing_waiter --> (fun () -> `Passed);

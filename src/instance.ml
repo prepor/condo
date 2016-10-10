@@ -26,7 +26,7 @@ let read_spec path =
         Logs.warn (fun m -> m "Can't read spec from file %s: %s" path e);
         `Continue ())
     |> Cancellable.defer_wait in
-  Cancellable.worker ~timeout:1000 ~tick ()
+  Cancellable.worker ~sleep:1000 ~tick ()
 
 let read_new_spec path current =
   let open Cancellable.Let_syntax in
@@ -34,7 +34,7 @@ let read_new_spec path current =
     let%map spec = read_spec path in
     if spec = current then `Continue ()
     else `Complete spec in
-  Cancellable.worker ~timeout:1000 ~tick ()
+  Cancellable.worker ~sleep:1000 ~tick ()
 
 let try_again_at () =
   Time.(add (now ()) (Span.of_int_sec 10) |> to_epoch)
@@ -178,5 +178,5 @@ let create system ~spec ~snapshot =
   let worker =
     let open Cancellable.Let_syntax in
     let%bind snapshot' = actualize_snapshot snapshot |> Cancellable.defer_wait in
-    Cancellable.worker ?timeout:None ~tick snapshot' in
+    Cancellable.worker ?sleep:None ~tick snapshot' in
   {worker}

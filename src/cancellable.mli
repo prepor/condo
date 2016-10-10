@@ -19,7 +19,7 @@ val defer : 'a Deferred.t -> ('a, 'b) t
 val defer_wait : 'a Deferred.t -> ('a, 'b) t
 
 (* Cancellable worker loop. Constantly call `tick` until canceling. Cancelling cancel current tick too *)
-val worker : ?timeout:int -> tick:('b -> ([`Complete of 'a | `Continue of 'b], 'c) t) -> 'b -> ('a, 'c) t
+val worker : ?sleep:int -> tick:('b -> ([`Complete of 'a | `Continue of 'b], 'c) t) -> 'b -> ('a, 'c) t
 
 type 'a choice = Choice : ('c, unit) t * ('c -> 'a) -> 'a choice
 

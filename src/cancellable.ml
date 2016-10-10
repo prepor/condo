@@ -69,14 +69,14 @@ end
 include Monad.Make2 (M)
 
 (* cancel guarantees that last tick had finished *)
-let worker ?timeout ~tick init_state =
+let worker ?sleep ~tick init_state =
   let rec worker_tick state =
     let open Let_syntax in
     match%bind (tick state) with
     | `Complete v ->
         return v
     | `Continue v ->
-        let%bind () = match timeout with
+        let%bind () = match sleep with
         | Some v -> after (Time.Span.of_ms (float_of_int v)) |> defer
         | None -> return () in
         worker_tick v in
