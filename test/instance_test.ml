@@ -25,23 +25,23 @@ let%expect_test "basic" =
   let%bind () = wait_for_a_stable "prepor/condo-test:good" in
   let%bind () = I.stop inst in
   [%expect {|
-    test.native: [INFO] Can't read state file, initialized new one
-    test.native: [INFO] New instance from /tmp/condo_spec with state Init
-    test.native: [INFO] Pulling image prepor/condo-test:good
-    test.native: [INFO] [condo_spec] New state: (Wait
+    Can't read state file, initialized the new one
+    New instance from /tmp/condo_spec with state Init
+    Pulling image prepor/condo-test:good
+    condo_spec --> New state: (Wait
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
         (spec (Assoc ((image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
-    test.native: [INFO] [condo_spec] New state: (Stable
+    condo_spec --> New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
         (spec (Assoc ((image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
-    test.native: [INFO] Pulling image prepor/condo-test:good2
-    test.native: [INFO] [condo_spec] New state: (WaitNext
+    Pulling image prepor/condo-test:good2
+    condo_spec --> New state: (WaitNext
      (((id .+) (regexp)
        (spec
         ((deploy (After 1))
@@ -52,14 +52,14 @@ let%expect_test "basic" =
         ((deploy (After 1))
          (spec (Assoc ((image (String prepor/condo-test:good2)))))
          (health_timeout 10) (stop_timeout 10))))))
-    test.native: [INFO] [condo_spec] New state: (Stable
+    condo_spec --> New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
         (spec (Assoc ((image (String prepor/condo-test:good2)))))
         (health_timeout 10) (stop_timeout 10)))))
-    test.native: [INFO] Pulling image prepor/condo-test:bad
-    test.native: [INFO] [condo_spec] New state: (WaitNext
+    Pulling image prepor/condo-test:bad
+    condo_spec --> New state: (WaitNext
      (((id .+) (regexp)
        (spec
         ((deploy (After 1))
@@ -70,18 +70,18 @@ let%expect_test "basic" =
         ((deploy (After 1))
          (spec (Assoc ((image (String prepor/condo-test:bad)))))
          (health_timeout 10) (stop_timeout 10))))))
-    test.native: [INFO] [condo_spec] New state: (TryAgainNext
+    test.native: [WARNING] condo_spec --> Health checked not passed in 10 secs
+    condo_spec --> New state: (TryAgainNext
      (((id .+) (regexp)
        (spec
         ((deploy (After 1))
          (spec (Assoc ((image (String prepor/condo-test:good2)))))
          (health_timeout 10) (stop_timeout 10))))
-      ((deploy (After 1))
-       (spec (Assoc ((image (String prepor/condo-test:bad)))))
+      ((deploy (After 1)) (spec (Assoc ((image (String prepor/condo-test:bad)))))
        (health_timeout 10) (stop_timeout 10))
       .+)) (regexp)
-    test.native: [INFO] Pulling image prepor/condo-test:good
-    test.native: [INFO] [condo_spec] New state: (WaitNext
+    Pulling image prepor/condo-test:good
+    condo_spec --> New state: (WaitNext
      (((id .+) (regexp)
        (spec
         ((deploy (After 1))
@@ -92,11 +92,11 @@ let%expect_test "basic" =
         ((deploy (After 1))
          (spec (Assoc ((image (String prepor/condo-test:good)))))
          (health_timeout 10) (stop_timeout 10))))))
-    test.native: [INFO] [condo_spec] New state: (Stable
+    condo_spec --> New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
         (spec (Assoc ((image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
-    test.native: [INFO] [condo_spec] Stop
-    test.native: [INFO] [condo_spec] New state: Init |}]
+    condo_spec --> Stop
+    condo_spec --> New state: Init |}]

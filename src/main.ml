@@ -1,15 +1,26 @@
-open Core.Std
-open Async.Std
+(* A.Signal.terminating contains hup and we need to handle it
+   separately to update Docker config (see Docker.wait_for_config_updates) *)
+
+let start {Condo.Cli.docker_config; docker_endpoint; state_path; prefixes} =
+  let open Core.Std in
+  let open Async.Std in
+  Random.self_init ();
+  let terminating = [Signal.alrm; Signal.int; Signal.term;
+                     Signal.usr1; Signal.usr2] in
+
+  (let%map system = Condo.System.create ~docker_config ~docker_endpoint ~state_path in
+   let supervisor = Condo.Supervisor.create ~system ~prefixes in
+   Shutdown.at_shutdown (fun () -> Condo.Supervisor.stop supervisor)) |> don't_wait_for;
+  (* 30 min? it should be configurable or we should excplicit about it in
+     documentation *)
+  let at_shutdown _s =
+    Shutdown.shutdown ~force:(after (Time.Span.of_min 30.0)) 0 in
+  Signal.handle terminating ~f:at_shutdown;
+  never_returns (Scheduler.go ())
 
 let () =
-  (* while true do *)
-  (*   let i = Ivar.create () in *)
-  (*   Deferred.upon (Ivar.read i) (fun v -> print_endline "DEEE"); *)
-  (* done; *)
-  Random.self_init ();
-  (match%map Condo.Spec.from_file "specs/nginx.edn" with
-  | Ok spec ->
-      print_endline (Sexp.to_string_hum (Condo.Spec.sexp_of_t spec))
-  | Error error ->
-      printf "Error while decoding: %s\n" (Exn.to_string error)) |> don't_wait_for;
-  never_returns (Scheduler.go ())
+  let open Cmdliner in
+  match Term.eval Condo.Cli.cmd with
+  | `Error _ -> exit 1
+  | `Ok v -> start v
+  | _ -> exit 0

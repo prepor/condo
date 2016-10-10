@@ -16,7 +16,7 @@ let read_state state_path =
                        >>| Result.ok_or_failwith) with
   | Ok v -> v
   | Error e ->
-      Logs.info (fun m -> m "Can't read state file, initialized new one");
+      Logs.app (fun m -> m "Can't read state file, initialized the new one");
       []
 
 let create ~docker_endpoint ~docker_config ~state_path =

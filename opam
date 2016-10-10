@@ -9,6 +9,11 @@ bug-reports: "https://github.com/prepor/condo/issues"
 tags: []
 available: [ ocaml-version >= "4.01.0"]
 depends: [
+  "core"
+  "async"
+  "fmt"
+  "logs"
+  "cmdliner"  
   "ocamlfind" {build}
   "ocamlbuild" {build}
   "topkg" {build} ]

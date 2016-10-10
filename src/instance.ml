@@ -54,7 +54,9 @@ let apply system spec_path snapshot control =
   let wait_or_try_again spec =
     match%map Docker.start docker ~name ~spec:spec.Spec.spec with
     | Ok id -> `Continue (Wait {id; spec})
-    | Error e -> `Continue (TryAgain (spec, try_again_at ())) in
+    | Error e ->
+        Logs.err (fun m -> m "%s --> Error while starting container: %s" name e);
+        `Continue (TryAgain (spec, try_again_at ())) in
   let wait_next_or_try_again stable spec =
     match spec.Spec.deploy with
     | Spec.Before ->
@@ -63,7 +65,9 @@ let apply system spec_path snapshot control =
     | Spec.After _ ->
         match%map Docker.start docker ~name ~spec:spec.Spec.spec with
         | Ok id -> `Continue (WaitNext (stable, {id; spec}))
-        | Error e -> `Continue (TryAgainNext (stable, spec, try_again_at ())) in
+        | Error e ->
+            Logs.err (fun m -> m "%s --> Error while starting container: %s" name e);
+            `Continue (TryAgainNext (stable, spec, try_again_at ())) in
 
   let stop snapshot =
     let%map () = (match snapshot with
@@ -94,7 +98,9 @@ let apply system spec_path snapshot control =
     Cancellable.([new_spec --> stop_and_start;
                   health_check --> (function
                     | `Passed -> `Continue (Stable container) |> Deferred.return
-                    | `Not_passed -> `Continue (TryAgain (container.spec, try_again_at ()))
+                    | `Not_passed ->
+                        Logs.warn (fun m -> m "%s --> Health checked not passed in %i secs" name timeout);
+                        `Continue (TryAgain (container.spec, try_again_at ()))
                                      |> Deferred.return)]) in
   let try_again_choices spec at =
     let open Cancellable in
@@ -119,7 +125,9 @@ let apply system spec_path snapshot control =
               let%bind () = docker_stop next in
               match%map Docker.start docker ~name ~spec:spec.Spec.spec with
               | Ok id -> `Continue (WaitNext (stable, {id; spec}))
-              | Error e -> `Continue (TryAgainNext (stable, spec, try_again_at ())));
+              | Error e ->
+                  Logs.err (fun m -> m "%s --> Error while starting container: %s" name e);
+                  `Continue (TryAgainNext (stable, spec, try_again_at ())));
      C.choice (Docker.wait_healthchecks docker next.id ~timeout |> C.defer) (function
        | `Passed ->
            (match next.spec.Spec.deploy with
@@ -131,7 +139,9 @@ let apply system spec_path snapshot control =
                let%bind () = after (Time.Span.of_int_sec timeout) in
                let%map () = docker_stop stable in
                `Continue (Stable next))
-       | `Not_passed -> `Continue (TryAgainNext (stable, next.spec, try_again_at ()))
+       | `Not_passed ->
+           Logs.warn (fun m -> m "%s --> Health checked not passed in %i secs" name timeout);
+           `Continue (TryAgainNext (stable, next.spec, try_again_at ()))
                         |> return)] in
   let try_again_next_choices stable spec at =
     let new_spec = (read_new_spec spec_path spec) in
@@ -142,10 +152,10 @@ let apply system spec_path snapshot control =
   let apply_choices choices =
     C.choose (C.choice control' (function
       | Stop ->
-          Logs.info (fun m -> m "[%s] Stop" name);
+          Logs.app (fun m -> m "%s --> Stop" name);
           stop snapshot
       | Suspend ->
-          Logs.info (fun m -> m "[%s] Suspend" name);
+          Logs.app (fun m -> m "%s --> Suspend" name);
           return (`Complete snapshot))
               ::choices)
     |> Deferred.join in
@@ -160,7 +170,7 @@ let apply system spec_path snapshot control =
   let%bind res = apply_choices choices in
   let snapshot' = match res with | `Continue v | `Complete v -> v in
   let%map () =
-    Logs.info (fun m -> m "[%s] New state: %s" name (snapshot' |> sexp_of_snapshot |> Sexp.to_string_hum));
+    Logs.app (fun m -> m "%s --> New state: %s" name (snapshot' |> sexp_of_snapshot |> Sexp.to_string_hum));
     System.place_snapshot system ~name ~snapshot:(snapshot' |> snapshot_to_yojson) in
   res
 
@@ -179,7 +189,7 @@ let actualize_snapshot snapshot =
   return snapshot
 
 let create system ~spec ~snapshot =
-  Logs.info (fun m -> m "New instance from %s with state %s" spec
+  Logs.app (fun m -> m "New instance from %s with state %s" spec
                 (Sexp.to_string_hum @@ sexp_of_snapshot snapshot));
   let tick last_snapshot =
     Cancellable.wrap (apply system spec last_snapshot) in

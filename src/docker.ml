@@ -33,9 +33,9 @@ let load_config = function
 | Some config_path ->
     match%map try_with (fun () -> load_config_exn config_path) with
     | Ok v ->
-        Logs.info (fun m -> m "Docker config loaded from %s: %s" config_path
-                      (List.Assoc.sexp_of_t String.sexp_of_t sexp_of_auth v
-                       |> Sexp.to_string_hum));
+        Logs.app (fun m -> m "Docker config loaded from %s: %s" config_path
+                     (List.Assoc.sexp_of_t String.sexp_of_t sexp_of_auth v
+                      |> Sexp.to_string_hum));
         v
     | Error exn ->
         Logs.warn (fun m -> m "Error while loading Docker config from %s: %s" config_path (Exn.to_string exn));
@@ -130,7 +130,7 @@ let map_result res =
   Result.(res |> map_error ~f:Exn.to_string >>= not_200_as_error)
 
 let pull_image t image =
-  Logs.info (fun m -> m "Pulling image %s" image);
+  Logs.app (fun m -> m "Pulling image %s" image);
   let error_checker s =
     let stream = Yojson.Basic.stream_from_string s in
     let rec check () =
