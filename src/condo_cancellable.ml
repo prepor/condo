@@ -26,6 +26,12 @@ let wrap f =
 
 let wait {deferred} = deferred
 
+exception Unexpected_cancel
+let wait_exn t =
+  match%map wait t with
+  | `Result v -> v
+  | `Cancelled v -> raise Unexpected_cancel
+
 let cancel {canceller} v = canceller v
 
 let defer d = create d ~canceller:(fun _ -> return ())
@@ -81,3 +87,7 @@ let worker ?sleep ~tick init_state =
         | None -> return () in
         worker_tick v in
   worker_tick init_state
+
+let wrap_tick f =
+  let wrapped v = f v |> defer_wait in
+  wrapped
