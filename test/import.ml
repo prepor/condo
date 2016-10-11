@@ -28,7 +28,12 @@ type edn = [
   | `Tag of (string option * string * edn) ]
 [@@deriving sexp]
 
-include Condo
+module System = Condo_system
+module Instance = Condo_instance
+module Docker = Condo_docker
+module Cancel = Condo_cancellable
+module Spec = Condo_spec
+module Supervisor = Condo_supervisor
 
 let system () =
   let%bind _ = try_with (fun () -> Unix.unlink "/tmp/condo_state") in
@@ -56,8 +61,8 @@ let wait_for name snapshot_checker =
   let tick () =
     let%map state = read_state "/tmp/condo_state" in
     inspect_state state in
-  let wrapped () = tick () |> Cancellable.defer in
-  Cancellable.(
+  let wrapped () = tick () |> Cancel.defer in
+  Cancel.(
     let waiter = worker ~sleep:200 ~tick:wrapped () in
     let timeout = after (Time.Span.of_int_sec 30) |> defer in
     choose [

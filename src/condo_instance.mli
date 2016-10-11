@@ -4,23 +4,23 @@ open! Async.Std
 type t
 
 type container = {
-  id : Docker.id;
-  spec : Spec.t
+  id : Condo_docker.id;
+  spec : Condo_spec.t
 } [@@deriving sexp]
 
 type snapshot = | Init
                 | Wait of container
-                | TryAgain of (Spec.t * float)
+                | TryAgain of (Condo_spec.t * float)
                 | Stable of container
                 | WaitNext of (container * container)
-                | TryAgainNext of (container * Spec.t * float)
+                | TryAgainNext of (container * Condo_spec.t * float)
 [@@deriving sexp, yojson]
 
 val parse_snapshot : Yojson.Safe.json -> (snapshot, string) Result.t
 
 val init_snaphot : unit -> snapshot
 
-val create : System.t -> spec:string -> snapshot:snapshot -> t
+val create : Condo_system.t -> spec:string -> snapshot:snapshot -> t
 
 val suspend : t -> unit Deferred.t
 

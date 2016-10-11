@@ -1,6 +1,10 @@
 open! Core.Std
 open! Async.Std
 
+module Docker = Condo_docker
+module Cancel = Condo_cancellable
+module Spec = Condo_spec
+
 type container = {
   id : Docker.id;
   spec : Spec.t
@@ -16,7 +20,7 @@ type snapshot = | Init
 
 type control = Stop | Suspend
 
-type t = { worker : (snapshot, control) Cancellable.t }
+type t = { worker : (snapshot, control) Cancel.t }
 
 let read_spec path =
   let tick () =
@@ -29,25 +33,25 @@ let read_spec path =
     | Error e ->
         Logs.warn (fun m -> m "Can't read spec from file %s: %s" path (Exn.to_string e));
         `Continue ())
-    |> Cancellable.defer_wait in
-  Cancellable.worker ~sleep:1000 ~tick ()
+    |> Cancel.defer_wait in
+  Cancel.worker ~sleep:1000 ~tick ()
 
 let read_new_spec path current =
-  let open Cancellable.Let_syntax in
+  let open Cancel.Let_syntax in
   let tick () =
     let%map spec = read_spec path in
     if spec = current then `Continue ()
     else `Complete spec in
-  Cancellable.worker ~sleep:1000 ~tick ()
+  Cancel.worker ~sleep:1000 ~tick ()
 
 let try_again_at () =
   Time.(add (now ()) (Span.of_int_sec 10) |> to_epoch)
 
 (* FIXME error handling *)
 let apply system spec_path snapshot control =
-  let docker = System.docker system in
-  let control' = Cancellable.defer control in
-  let name = Utils.name_from_path spec_path in
+  let docker = Condo_system.docker system in
+  let control' = Cancel.defer control in
+  let name = Condo_utils.name_from_path spec_path in
   let docker_stop container =
     Docker.stop docker container.id ~timeout:container.spec.Spec.stop_timeout in
   (* Common actions *)
@@ -81,11 +85,11 @@ let apply system spec_path snapshot control =
       | TryAgainNext (stable, _, _) -> docker_stop stable) in
     `Complete Init in
 
-  let module C = Cancellable in
+  let module C = Condo_cancellable in
 
   (* State choices *)
   let init_choices () =
-    let open Cancellable in
+    let open C in
     let spec = (read_spec spec_path) in
     [spec --> wait_or_try_again;] in
   let wait_choices container =
@@ -95,22 +99,22 @@ let apply system spec_path snapshot control =
     let stop_and_start spec =
       let%bind () = docker_stop container in
       wait_or_try_again spec in
-    Cancellable.([new_spec --> stop_and_start;
+    C.([new_spec --> stop_and_start;
                   health_check --> (function
                     | `Passed -> `Continue (Stable container) |> Deferred.return
                     | `Not_passed ->
                         Logs.warn (fun m -> m "%s --> Health checked not passed in %i secs" name timeout);
                         `Continue (TryAgain (container.spec, try_again_at ()))
-                                     |> Deferred.return)]) in
+                        |> Deferred.return)]) in
   let try_again_choices spec at =
-    let open Cancellable in
+    let open C in
     let new_spec = (read_new_spec spec_path spec) in
     let timeout = (Clock.at (Time.of_epoch at) |> C.defer) in
     [new_spec --> wait_or_try_again;
      timeout --> (fun () -> wait_or_try_again spec)] in
   let stable_choices container =
     let new_spec = (read_new_spec spec_path container.spec) in
-    Cancellable.[
+    C.[
       new_spec --> (wait_next_or_try_again container)] in
   let wait_next_choices stable next =
     let timeout = next.spec.Spec.health_timeout in
@@ -142,11 +146,11 @@ let apply system spec_path snapshot control =
        | `Not_passed ->
            Logs.warn (fun m -> m "%s --> Health checked not passed in %i secs" name timeout);
            `Continue (TryAgainNext (stable, next.spec, try_again_at ()))
-                        |> return)] in
+           |> return)] in
   let try_again_next_choices stable spec at =
     let new_spec = (read_new_spec spec_path spec) in
     let timeout = (Clock.at (Time.of_epoch at) |> C.defer) in
-    Cancellable.[
+    C.[
       new_spec --> (wait_next_or_try_again stable);
       timeout --> (fun () -> wait_or_try_again spec)] in
   let apply_choices choices =
@@ -171,7 +175,7 @@ let apply system spec_path snapshot control =
   let snapshot' = match res with | `Continue v | `Complete v -> v in
   let%map () =
     Logs.app (fun m -> m "%s --> New state: %s" name (snapshot' |> sexp_of_snapshot |> Sexp.to_string_hum));
-    System.place_snapshot system ~name ~snapshot:(snapshot' |> snapshot_to_yojson) in
+    Condo_system.place_snapshot system ~name ~snapshot:(snapshot' |> snapshot_to_yojson) in
   res
 
 let parse_snapshot data = snapshot_of_yojson data
@@ -179,10 +183,10 @@ let parse_snapshot data = snapshot_of_yojson data
 let init_snaphot () = Init
 
 let suspend {worker} =
-  Cancellable.cancel worker Stop
+  Cancel.cancel worker Stop
 
 let stop {worker} =
-  Cancellable.cancel worker Stop
+  Cancel.cancel worker Stop
 
 (* FIXME actualize init_snaphot *)
 let actualize_snapshot snapshot =
@@ -190,11 +194,11 @@ let actualize_snapshot snapshot =
 
 let create system ~spec ~snapshot =
   Logs.app (fun m -> m "New instance from %s with state %s" spec
-                (Sexp.to_string_hum @@ sexp_of_snapshot snapshot));
+               (Sexp.to_string_hum @@ sexp_of_snapshot snapshot));
   let tick last_snapshot =
-    Cancellable.wrap (apply system spec last_snapshot) in
+    Cancel.wrap (apply system spec last_snapshot) in
   let worker =
-    let open Cancellable.Let_syntax in
-    let%bind snapshot' = actualize_snapshot snapshot |> Cancellable.defer_wait in
-    Cancellable.worker ?sleep:None ~tick snapshot' in
+    let open Cancel.Let_syntax in
+    let%bind snapshot' = actualize_snapshot snapshot |> Cancel.defer_wait in
+    Cancel.worker ?sleep:None ~tick snapshot' in
   {worker}

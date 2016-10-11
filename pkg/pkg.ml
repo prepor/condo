@@ -10,5 +10,5 @@ let () =
                          % "package(ppx_driver.ocamlbuild)"
                          %% of_list files)) ()) in
   Pkg.describe "condo" ~build @@ fun c ->
-  Ok [ Pkg.bin "src/main" ~dst:"condo";
+  Ok [ Pkg.bin "src/condo" ~dst:"condo";
        Pkg.test (* ~exts:(Exts.ext ".byte") ~auto:false *) ~args:Cmd.(v "inline-test-runner" % "condo") "test/test"; ]

@@ -4,7 +4,7 @@ open! Async.Std
 type state = (string * Yojson.Safe.json) list [@@deriving yojson]
 
 type t = {
-  docker : Docker.t;
+  docker : Condo_docker.t;
   state_path : string;
   mutable state : state;
 }
@@ -20,7 +20,7 @@ let read_state state_path =
       []
 
 let create ~docker_endpoint ~docker_config ~state_path =
-  let%bind docker = Docker.create ~endpoint:docker_endpoint ~config_path:docker_config in
+  let%bind docker = Condo_docker.create ~endpoint:docker_endpoint ~config_path:docker_config in
   let%map state = read_state state_path in
   {docker; state_path; state}
 

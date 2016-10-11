@@ -1,6 +1,6 @@
 open! Core.Std
 
-module Base64 = Utils_base64
+module Base64 = Condo_utils_base64
 
 let name_from_path path =
   try Filename.(path |> basename |> chop_extension)

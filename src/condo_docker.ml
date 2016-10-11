@@ -3,6 +3,9 @@ module StdStream = Stream
 open! Core.Std
 open! Async.Std
 
+module Utils = Condo_utils
+module Cancel = Condo_cancellable
+
 type auth = {
   username : string;
   password : string;
@@ -97,8 +100,8 @@ let wait_healthchecks t id ~timeout =
     | Ok {Async_http.Response.body} ->
         if body = "healthy" then `Complete ()
         else `Continue () in
-  let wrapped () = tick () |> Cancellable.defer_wait in
-  Cancellable.(
+  let wrapped () = tick () |> Cancel.defer_wait in
+  Cancel.(
     let passing_waiter = worker ~sleep:500 ~tick:wrapped () in
     let timeout = after (Time.Span.of_int_sec timeout) |> defer in
     choose [

@@ -2,7 +2,7 @@ open! Core.Std
 open! Async.Std
 open! Import
 
-module C = Cancellable
+module C = Cancel
 let%expect_test "defer" =
   let v = Ivar.create () in
   let c = C.defer (Ivar.read v) in

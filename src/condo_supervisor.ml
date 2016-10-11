@@ -3,10 +3,12 @@ open! Async.Std
 
 type control = Stop | Suspend
 
-module StringPool = Keyed_pool.Make(String)
+module StringPool = Condo_keyed_pool.Make(String)
+module Instance = Condo_instance
+module Cancel = Condo_cancellable
 
 type t = {
-  workers : (unit, unit) Cancellable.t list;
+  workers : (unit, unit) Cancel.t list;
   pool : Instance.t StringPool.t;
 }
 
@@ -31,13 +33,13 @@ let watch_prefix system pool prefix =
     let%bind specs = specs_list prefix in
     let%map () = StringPool.update pool specs in
     `Continue () in
-  let wrapped () = Cancellable.defer_wait (tick ())in
-  Cancellable.worker ~sleep:500 ~tick:wrapped ()
+  let wrapped () = Cancel.defer_wait (tick ())in
+  Cancel.worker ~sleep:500 ~tick:wrapped ()
 
 let create ~system ~prefixes =
   let on_new spec =
-    let name = Utils.name_from_path spec in
-    let snapshot = match System.get_snapshot system ~name with
+    let name = Condo_utils.name_from_path spec in
+    let snapshot = match Condo_system.get_snapshot system ~name with
     | None -> Instance.init_snaphot ()
     | Some v -> (match Instance.parse_snapshot v with
       | Ok v -> v
@@ -50,7 +52,7 @@ let create ~system ~prefixes =
   {workers;pool}
 
 let stop' f t =
-  let%bind () = Deferred.List.iter ~f:(fun v -> Cancellable.cancel v ()) t.workers in
+  let%bind () = Deferred.List.iter ~f:(fun v -> Cancel.cancel v ()) t.workers in
   Deferred.List.iter ~f (StringPool.objects t.pool)
 
 let stop = stop' Instance.stop

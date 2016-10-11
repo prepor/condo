@@ -7,7 +7,7 @@ val create :
   state_path:string ->
   t Deferred.t
 
-val docker : t -> Docker.t
+val docker : t -> Condo_docker.t
 
 val place_snapshot : t -> name:string -> snapshot:Yojson.Safe.json -> unit Deferred.t
 
