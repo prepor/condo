@@ -187,17 +187,36 @@ let suspend {worker} =
 let stop {worker} =
   Cancel.cancel worker Stop
 
-(* FIXME actualize init_snaphot *)
-let actualize_snapshot snapshot =
-  return snapshot
+let actualize_snapshot system snapshot =
+  let is_running container = Docker.is_running (Condo_system.docker system) container.id in
+  match snapshot with
+  | Init | TryAgain _ -> return snapshot
+  | Wait container | Stable container -> begin
+      match%map is_running container with
+      | true -> snapshot
+      | false -> TryAgain (container.spec, (try_again_at ()))
+    end
+  | TryAgainNext (container, spec, at) -> begin
+            match%map is_running container with
+      | true -> snapshot
+      | false -> TryAgain (spec, at)
+    end
+  | WaitNext (stable, next) -> begin
+      let%bind is_running_stable = is_running stable in
+      let%map is_running_next = is_running next in
+            match is_running_stable, is_running_next with
+        | true, true -> snapshot
+        | false, true -> Wait next
+        | true, false -> TryAgainNext (stable, next.spec, try_again_at ())
+        | false, false -> TryAgain (next.spec, try_again_at ())
+    end
 
-let create system ~spec ~snapshot =
   Logs.app (fun m -> m "New instance from %s with state %s" spec
                (Sexp.to_string_hum @@ sexp_of_snapshot snapshot));
   let tick last_snapshot =
     Cancel.wrap (apply system spec last_snapshot) in
   let worker =
     let open Cancel.Let_syntax in
-    let%bind snapshot' = actualize_snapshot snapshot |> Cancel.defer in
+    let%bind snapshot' = actualize_snapshot system snapshot |> Cancel.defer in
     Cancel.worker ?sleep:None ~tick snapshot' in
   {worker}
