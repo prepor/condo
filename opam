@@ -13,10 +13,14 @@ depends: [
   "async"
   "fmt"
   "logs"
-  "cmdliner"  
+  "cmdliner"
+  "async_http"
+  "edn"
+  "cohttp"
+  "ppx_deriving_yojson"
   "ocamlfind" {build}
   "ocamlbuild" {build}
-  "topkg" {build} ]
+  "topkg" {build}]
 depopts: []
 build: [
   "ocaml" "pkg/pkg.ml" "build"
