@@ -75,7 +75,7 @@ let wait_for_image name image spec_extractor =
   let checker snapshot =
     match spec_extractor snapshot with
     | Some spec -> if
-      image = Yojson.Basic.Util.(spec.Spec.spec |> member "image" |> to_string)
+      image = Yojson.Basic.Util.(spec.Spec.spec |> member "Image" |> to_string)
         then true
         else false
     | None -> false in
@@ -97,7 +97,7 @@ let wait_for_a_init name =
 
 let write_spec path image =
   let spec = `Assoc [(`Keyword (None, "spec")),
-                     `Assoc [(`Keyword (None, "image"), `String image)];
+                     `Assoc [(`Keyword (None, "Image"), `String image)];
                      (`Keyword (None, "deploy")),
                      `Vector [(`Keyword (None, "after")); `Int 1]] in
   Writer.save path (Edn.to_string spec)

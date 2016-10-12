@@ -16,7 +16,7 @@ let%expect_test "test config" =
 
 let start_and_wait image =
   let%bind d = docker () in
-  let spec = `Assoc ["image", `String image] in
+  let spec = `Assoc ["Image", `String image] in
   let%bind res = D.start d ~name:"nginx" ~spec in
   print_s [%message "result" ~_:(res:(D.id,string) Result.t)];
   let%map res = D.wait_healthchecks d (Result.ok_or_failwith res) ~timeout:3 in

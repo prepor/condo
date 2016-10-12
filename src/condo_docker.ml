@@ -129,7 +129,7 @@ let not_200_as_error res =
   else Error (sprintf "Error while docker request (status %i): %s" status body)
 
 let extract_image spec =
-  Yojson.Basic.Util.(spec |> member "image" |> to_string_option)
+  Yojson.Basic.Util.(spec |> member "Image" |> to_string_option)
   |> Result.of_option ~error:"Can't find image in spec"
   |> return
 

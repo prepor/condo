@@ -43,7 +43,7 @@ let wait_for' system ~image ~name ~timeout =
   let image_from_container container =
     let open Yojson.Basic.Util in
     container.Condo_instance.spec.Condo_spec.spec
-    |> member "image" |> to_string_option in
+    |> member "Image" |> to_string_option in
   let stable_image_from_snapshot snapshot =
     let open Condo_instance in
     match snapshot with
