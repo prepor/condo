@@ -2,25 +2,22 @@ FROM ocaml/opam:alpine-3.3_ocaml-4.02.3
 
 RUN sudo apk add --no-cache m4 perl openssl-dev
 
-MOUNT /home/opam/.opam/system/lib/
-MOUNT /home/opam/.opam/system/packages/
-MOUNT /home/opam/.opam/system/packages.dev/
-RUN sudo chown -R opam /home/opam/.opam/system/
-
-ATTACH ["/bin/sh"]
-
 RUN opam pin add -y async_http https://github.com/prepor/async-http.git
 
-COPY . /src
+COPY opam /src/opam
+RUN sudo chown -R opam /src
 WORKDIR /src
 
 RUN opam pin add -ny condo .
 RUN opam install -y --deps-only condo
 RUN opam install -y topkg-care
 
+COPY . /src
 RUN sudo chown -R opam /src
 
 RUN eval `opam config env` && topkg build
+
+USER root
 
 EXPORT ./_build/src/condo.native condo.native
 
@@ -28,4 +25,8 @@ FROM gliderlabs/alpine:3.4
 
 IMPORT condo.native /usr/bin/condo
 
-TAG prepor/condo:{{ .Version }}
+VOLUME ["/var/lib/condo"]
+EXPOSE 80
+CMD condo /var/lib/condo -s /var/lib/condo/state --server 80 $CONDO_ARGS
+
+PUSH prepor/condo:{{ .Version }}
