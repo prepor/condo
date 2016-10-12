@@ -100,9 +100,8 @@ let wait_healthchecks t id ~timeout =
     | Ok {Async_http.Response.body} ->
         if body = "healthy" then `Complete ()
         else `Continue () in
-  let wrapped () = tick () |> Cancel.defer_wait in
   Cancel.(
-    let passing_waiter = worker ~sleep:500 ~tick:wrapped () in
+    let passing_waiter = worker ~sleep:500 ~tick:(Cancel.wrap_tick tick) () in
     let timeout = after (Time.Span.of_int_sec timeout) |> defer in
     choose [
       passing_waiter --> (fun () -> `Passed);

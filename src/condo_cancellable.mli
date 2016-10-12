@@ -19,7 +19,6 @@ val cancel : ('a, 'b) t -> 'b -> unit Deferred.t
 (* Creates cancellable from any deferred. On cancel don't wait anything *)
 val defer : 'a Deferred.t -> ('a, 'b) t
 (* Creates cancellable from any deferred. On cancel wait for underling deferred. Always returns `Result on wait as wrap-cancellable *)
-val defer_wait : 'a Deferred.t -> ('a, 'b) t
 
 (* Cancellable worker loop. Constantly call `tick` until canceling. Cancelling cancel current tick too *)
 val worker : ?sleep:int -> tick:('b -> ([`Complete of 'a | `Continue of 'b], 'c) t) -> 'b -> ('a, 'c) t

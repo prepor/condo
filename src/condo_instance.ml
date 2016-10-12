@@ -32,9 +32,8 @@ let read_spec path =
     | Error (Unix.Unix_error (Unix.ENOENT, _, _)) -> `Continue ()
     | Error e ->
         Logs.warn (fun m -> m "Can't read spec from file %s: %s" path (Exn.to_string e));
-        `Continue ())
-    |> Cancel.defer_wait in
-  Cancel.worker ~sleep:1000 ~tick ()
+        `Continue ()) in
+  Cancel.worker ~sleep:1000 ~tick:(Cancel.wrap_tick tick) ()
 
 let read_new_spec path current =
   let open Cancel.Let_syntax in
@@ -199,6 +198,6 @@ let create system ~spec ~snapshot =
     Cancel.wrap (apply system spec last_snapshot) in
   let worker =
     let open Cancel.Let_syntax in
-    let%bind snapshot' = actualize_snapshot snapshot |> Cancel.defer_wait in
+    let%bind snapshot' = actualize_snapshot snapshot |> Cancel.defer in
     Cancel.worker ?sleep:None ~tick snapshot' in
   {worker}

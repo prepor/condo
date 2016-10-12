@@ -17,18 +17,6 @@ let%expect_test "defer" =
   print_s [%message "result" ~_:(res : [`Result of string | `Cancelled of unit])];
   [%expect {| (result (Result value)) |}]
 
-
-let%expect_test "defer_wait" =
-  let v = Ivar.create () in
-  let c = C.defer_wait (Ivar.read v) in
-  C.cancel c () >>| (fun _ ->  (print_endline "cancelled")) |> don't_wait_for;
-  Ivar.fill v "value";
-  let%bind res = C.wait c in
-  print_s [%message "result" ~_:(res : [`Result of string | `Cancelled of unit])];
-  [%expect {|
-    cancelled
-    (result (Result value)) |}]
-
 let%expect_test "choose" =
   let v1 = Ivar.create () in
   let v2 = Ivar.create () in

@@ -33,8 +33,7 @@ let watch_prefix system pool prefix =
     let%bind specs = specs_list prefix in
     let%map () = StringPool.update pool specs in
     `Continue () in
-  let wrapped () = Cancel.defer_wait (tick ())in
-  Cancel.worker ~sleep:500 ~tick:wrapped ()
+  Cancel.worker ~sleep:500 ~tick:(Cancel.wrap_tick tick) ()
 
 let create ~system ~prefixes =
   let on_new spec =

@@ -89,5 +89,5 @@ let worker ?sleep ~tick init_state =
   worker_tick init_state
 
 let wrap_tick f =
-  let wrapped v = f v |> defer_wait in
+  let wrapped v = f v |> defer in
   wrapped
