@@ -106,9 +106,12 @@ let wait_healthchecks t id ~timeout =
     let passing_waiter = worker ~sleep:500 ~tick:(Cancel.wrap_tick tick) () in
     let timeout = after (Time.Span.of_int_sec timeout) |> defer in
     choose [
-      passing_waiter --> (fun () -> `Passed);
-      timeout --> (fun () -> `Not_passed);
-    ])
+      passing_waiter --> (fun () -> Deferred.return `Passed);
+      timeout --> (fun () ->
+          let open Deferred.Let_syntax in
+          let%map () = stop t id ~timeout:0 in
+          `Not_passed);
+    ]) |> Deferred.join
 
 let auth_headers t image =
   let encode {username; password} =
