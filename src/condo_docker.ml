@@ -86,11 +86,13 @@ let wait_healthchecks t id ~timeout =
                               |> parser (fun v ->
                                   let open Yojson.Basic in
                                   let json = from_string v in
-                                  Util.(json
-                                        |> member "State"
-                                        |> member "Health"
-                                        |> member "Status"
-                                        |> to_string))
+                                  let open Util in
+                                  let state = json |> member "State" in
+                                  let status = state |> member "Status" |> to_string in
+                                  match member "Health" state with
+                                  (* if there is no configured healthchecks *)
+                                  | `Assoc _ as obj -> (obj |> member "Status" |> to_string) = "healthy"
+                                  | _ -> status = "running")
                               |> get) in
     match res with
     | Error err ->
@@ -98,7 +100,7 @@ let wait_healthchecks t id ~timeout =
                       id (Exn.to_string err));
         `Continue ()
     | Ok {Async_http.Response.body} ->
-        if body = "healthy" then `Complete ()
+        if body = true then `Complete ()
         else `Continue () in
   Cancel.(
     let passing_waiter = worker ~sleep:500 ~tick:(Cancel.wrap_tick tick) () in
