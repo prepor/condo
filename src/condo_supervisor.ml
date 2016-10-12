@@ -10,6 +10,7 @@ module Cancel = Condo_cancellable
 type t = {
   workers : (unit, unit) Cancel.t list;
   pool : Instance.t StringPool.t;
+  mutable status : [`Started | `Stopped];
 }
 
 let file_extension path =
@@ -35,7 +36,20 @@ let watch_prefix system pool prefix =
     `Continue () in
   Cancel.worker ~sleep:500 ~tick:(Cancel.wrap_tick tick) ()
 
+let stop' f t =
+  if t.status = `Stopped then return ()
+  else begin
+    t.status <- `Stopped;
+    let%bind () = Deferred.List.iter ~f:(fun v -> Cancel.cancel v ()) t.workers in
+    Deferred.List.iter ~f (StringPool.objects t.pool)
+  end
+
+let stop = stop' Instance.stop
+
+let suspend = stop' Instance.suspend
+
 let create ~system ~prefixes =
+  let self = ref None in
   let on_new spec =
     let name = Condo_utils.name_from_path spec in
     let snapshot = match Condo_system.get_snapshot system ~name with
@@ -45,15 +59,15 @@ let create ~system ~prefixes =
       | Error err ->
           Logs.warn (fun m -> m "Error while restoring snapshot for %s, initializing new one: %s" spec err);
           Instance.init_snaphot ()) in
-    return @@ Instance.create system ~spec:spec ~snapshot in
+    let%map on_stable = if name = "self" then begin
+        Logs.app (fun m -> m"New version of self found, deploy started");
+        let%map () = suspend (Option.value_exn !self) in
+        (fun _ -> Shutdown.shutdown 0)
+      end
+      else return (fun _ -> ()) in
+    Instance.create system ~spec:spec ~on_stable ~snapshot in
   let pool = StringPool.create ~on_new ~on_stop:Instance.stop in
   let workers = List.map ~f:(watch_prefix system pool) prefixes in
-  {workers;pool}
-
-let stop' f t =
-  let%bind () = Deferred.List.iter ~f:(fun v -> Cancel.cancel v ()) t.workers in
-  Deferred.List.iter ~f (StringPool.objects t.pool)
-
-let stop = stop' Instance.stop
-
-let suspend = stop' Instance.suspend
+  let t = {workers;pool;status = `Started} in
+  self := Some t;
+  t

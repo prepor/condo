@@ -47,7 +47,7 @@ let try_again_at () =
   Time.(add (now ()) (Span.of_int_sec 10) |> to_epoch)
 
 (* FIXME error handling *)
-let apply system spec_path snapshot control =
+let apply system ?on_stable spec_path snapshot control =
   let docker = Condo_system.docker system in
   let control' = Cancel.defer control in
   let name = Condo_utils.name_from_path spec_path in
@@ -99,12 +99,12 @@ let apply system spec_path snapshot control =
       let%bind () = docker_stop container in
       wait_or_try_again spec in
     C.([new_spec --> stop_and_start;
-                  health_check --> (function
-                    | `Passed -> `Continue (Stable container) |> Deferred.return
-                    | `Not_passed ->
-                        Logs.warn (fun m -> m "%s --> Health checked not passed in %i secs" name timeout);
-                        `Continue (TryAgain (container.spec, try_again_at ()))
-                        |> Deferred.return)]) in
+        health_check --> (function
+          | `Passed -> `Continue (Stable container) |> Deferred.return
+          | `Not_passed ->
+              Logs.warn (fun m -> m "%s --> Health checked not passed in %i secs" name timeout);
+              `Continue (TryAgain (container.spec, try_again_at ()))
+              |> Deferred.return)]) in
   let try_again_choices spec at =
     let open C in
     let new_spec = (read_new_spec spec_path spec) in
@@ -167,7 +167,11 @@ let apply system spec_path snapshot control =
   | Init -> init_choices ()
   | Wait container -> wait_choices container
   | TryAgain (spec, at) -> try_again_choices spec at
-  | Stable container -> stable_choices container
+  | Stable container ->
+      (match on_stable with
+      | Some f -> f container
+      | None -> ());
+      stable_choices container
   | WaitNext (stable, next) -> wait_next_choices stable next
   | TryAgainNext (stable, spec, at) -> try_again_next_choices stable spec at in
   let%bind res = apply_choices choices in
@@ -211,10 +215,11 @@ let actualize_snapshot system snapshot =
         | false, false -> TryAgain (next.spec, try_again_at ())
     end
 
+let create ?on_stable system ~spec ~snapshot =
   Logs.app (fun m -> m "New instance from %s with state %s" spec
                (Sexp.to_string_hum @@ sexp_of_snapshot snapshot));
   let tick last_snapshot =
-    Cancel.wrap (apply system spec last_snapshot) in
+    Cancel.wrap (apply system ?on_stable spec last_snapshot) in
   let worker =
     let open Cancel.Let_syntax in
     let%bind snapshot' = actualize_snapshot system snapshot |> Cancel.defer in

@@ -13,3 +13,5 @@ val start : t -> name:string -> spec:Yojson.Basic.json -> (id, string) Result.t 
 val stop : t -> id -> timeout:int -> unit Deferred.t
 
 val wait_healthchecks : t -> id -> timeout:int -> [`Passed | `Not_passed] Deferred.t
+
+val is_running : t -> id -> bool Deferred.t
