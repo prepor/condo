@@ -186,7 +186,7 @@ let parse_snapshot data = snapshot_of_yojson data
 let init_snaphot () = Init
 
 let suspend {worker} =
-  Cancel.cancel worker Stop
+  Cancel.cancel worker Suspend
 
 let stop {worker} =
   Cancel.cancel worker Stop
