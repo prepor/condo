@@ -60,12 +60,15 @@ let create ~system ~prefixes =
           Logs.warn (fun m -> m "Error while restoring snapshot for %s, initializing new one: %s" spec err);
           Instance.init_snaphot ()) in
     let%map on_stable = if name = "self" then begin
-        Logs.app (fun m -> m"New version of self found, deploy started");
+        Logs.app (fun m -> m "New version of self found, deploy started");
         let%map () = suspend (Option.value_exn !self) in
-        (fun _ -> Shutdown.shutdown 0)
+        Some (fun snapshot ->
+            let%map () = Condo_system.place_snapshot system ~name
+                ~snapshot:(Instance.snapshot_to_yojson snapshot) in
+            Shutdown.shutdown 0)
       end
-      else return (fun _ -> ()) in
-    Instance.create system ~spec:spec ~on_stable ~snapshot in
+      else return None in
+    Instance.create system ~spec:spec ?on_stable ~snapshot in
   let pool = StringPool.create ~on_new ~on_stop:Instance.stop in
   let workers = List.map ~f:(watch_prefix system pool) prefixes in
   let t = {workers;pool;status = `Started} in

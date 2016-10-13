@@ -20,7 +20,7 @@ val parse_snapshot : Yojson.Safe.json -> (snapshot, string) Result.t
 
 val init_snaphot : unit -> snapshot
 
-val create : ?on_stable:(container -> unit) -> Condo_system.t -> spec:string -> snapshot:snapshot -> t
+val create : ?on_stable:(snapshot -> unit Deferred.t) -> Condo_system.t -> spec:string -> snapshot:snapshot -> t
 
 val suspend : t -> unit Deferred.t
 

@@ -167,13 +167,12 @@ let apply system ?on_stable spec_path snapshot control =
   | Init -> init_choices ()
   | Wait container -> wait_choices container
   | TryAgain (spec, at) -> try_again_choices spec at
-  | Stable container ->
-      (match on_stable with
-      | Some f -> f container
-      | None -> ());
-      stable_choices container
+  | Stable container -> stable_choices container
   | WaitNext (stable, next) -> wait_next_choices stable next
   | TryAgainNext (stable, spec, at) -> try_again_next_choices stable spec at in
+  let%bind () = match on_stable, snapshot with
+  | Some f, (Stable _ as snapshot) -> f snapshot
+  | _ -> return () in
   let%bind res = apply_choices choices in
   let snapshot' = match res with | `Continue v | `Complete v -> v in
   let%map () =
