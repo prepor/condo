@@ -28,6 +28,6 @@ IMPORT condo.native /usr/bin/condo
 
 VOLUME ["/var/lib/condo"]
 EXPOSE 80
-CMD exec condo /var/lib/condo -s /var/lib/condo/state --server 80 $CONDO_ARG
+CMD exec condo /var/lib/condo -s /var/lib/condo/state --server 80 $CONDO_ARGS
 
 PUSH prepor/condo:{{ .Version }}
