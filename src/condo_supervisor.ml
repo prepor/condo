@@ -48,27 +48,56 @@ let stop = stop' Instance.stop
 
 let suspend = stop' Instance.suspend
 
+module SelfInstance = struct
+  let need_to_start spec =
+    let hash = Digest.string spec |> Digest.to_hex in
+    match Sys.getenv "CONDO_SELF" with
+    | Some v when v = hash -> false
+    | _ -> true
+
+  let start system spec =
+    match Result.try_with (fun () -> Yojson.Basic.from_string spec) with
+    | Error err ->
+        Logs.err (fun m -> m "Can't parse self spec: %s" (Exn.to_string err));
+        Shutdown.shutdown 1;
+        return ()
+    | Ok spec ->
+        let docker = Condo_system.docker system in
+        match%bind Condo_docker.start docker ~name:"condo" ~spec with
+        | Error err ->
+            Logs.err (fun m -> m "Can't start myself: %s" err);
+            Shutdown.shutdown 1;
+            return ()
+        | Ok id ->
+            match%map Condo_docker.wait_healthchecks docker id ~timeout:10 with
+            | `Not_passed ->
+                Logs.err (fun m -> m "Health checks of myself haven't passed ;(");
+                Shutdown.shutdown 1;
+                ()
+            | `Passed ->
+                Logs.app (fun m -> m "Successfully deployed myself as %s" (Sexp.to_string_hum @@ Condo_docker.sexp_of_id id));
+                Shutdown.shutdown 0
+end
+
 let create ~system ~prefixes =
   let self = ref None in
   let on_new spec =
     let name = Condo_utils.name_from_path spec in
-    let snapshot = match Condo_system.get_snapshot system ~name with
-    | None -> Instance.init_snaphot ()
-    | Some v -> (match Instance.parse_snapshot v with
-      | Ok v -> v
-      | Error err ->
-          Logs.warn (fun m -> m "Error while restoring snapshot for %s, initializing new one: %s" spec err);
-          Instance.init_snaphot ()) in
-    let%map on_stable = if name = "self" then begin
-        Logs.app (fun m -> m "New version of self found, deploy started");
-        let%map () = suspend (Option.value_exn !self) in
-        Some (fun snapshot ->
-            let%map () = Condo_system.place_snapshot system ~name
-                ~snapshot:(Instance.snapshot_to_yojson snapshot) in
-            Shutdown.shutdown 0)
-      end
-      else return None in
-    Instance.create system ~spec:spec ?on_stable ~snapshot in
+    if name = "self" && SelfInstance.need_to_start spec then begin
+      Logs.app (fun m -> m "New version of self found, deploy started");
+      let%map () = suspend (Option.value_exn !self) in
+      SelfInstance.start system spec |> don't_wait_for;
+      None end
+    else begin
+      let snapshot = match Condo_system.get_snapshot system ~name with
+      | None -> Instance.init_snaphot ()
+      | Some v -> (match Instance.parse_snapshot v with
+        | Ok v -> v
+        | Error err ->
+            Logs.warn (fun m -> m "Error while restoring snapshot for %s, initializing new one: %s" spec err);
+            Instance.init_snaphot ()) in
+      return @@ Some (Instance.create system ~spec:spec ~snapshot)
+    end in
   let pool = StringPool.create ~on_new ~on_stop:Instance.stop in
   let workers = List.map ~f:(watch_prefix system pool) prefixes in
   let t = {workers;pool;status = `Started} in

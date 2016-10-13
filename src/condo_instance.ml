@@ -47,7 +47,7 @@ let try_again_at () =
   Time.(add (now ()) (Span.of_int_sec 10) |> to_epoch)
 
 (* FIXME error handling *)
-let apply system ?on_stable spec_path snapshot control =
+let apply system spec_path snapshot control =
   let docker = Condo_system.docker system in
   let control' = Cancel.defer control in
   let name = Condo_utils.name_from_path spec_path in
@@ -172,9 +172,6 @@ let apply system ?on_stable spec_path snapshot control =
   | TryAgainNext (stable, spec, at) -> try_again_next_choices stable spec at in
   let%bind res = apply_choices choices in
   let snapshot' = match res with | `Continue v | `Complete v -> v in
-  let%bind () = match on_stable, snapshot' with
-  | Some f, (Stable _) -> f snapshot'
-  | _ -> return () in
   let%map () =
     Logs.app (fun m -> m "%s --> New state: %s" name (snapshot' |> sexp_of_snapshot |> Sexp.to_string_hum));
     Condo_system.place_snapshot system ~name ~snapshot:(snapshot' |> snapshot_to_yojson) in
@@ -224,11 +221,11 @@ let actualize_snapshot system snapshot =
           TryAgain (next.spec, try_again_at ())
     end
 
-let create ?on_stable system ~spec ~snapshot =
+let create system ~spec ~snapshot =
   Logs.app (fun m -> m "New instance from %s with state %s" spec
                (Sexp.to_string_hum @@ sexp_of_snapshot snapshot));
   let tick last_snapshot =
-    Cancel.wrap (apply system ?on_stable spec last_snapshot) in
+    Cancel.wrap (apply system spec last_snapshot) in
   let worker =
     let open Cancel.Let_syntax in
     let%bind snapshot' = actualize_snapshot system snapshot |> Cancel.defer in
