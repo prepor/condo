@@ -11,4 +11,4 @@ let%expect_test "place snapshot" =
   print_endline (In_channel.read_all "/tmp/condo_state");
   [%expect {|
     Can't read state file, initialized the new one
-    [["nginx",["Init"]]] |}]
+    {"nginx":["Init"]} |}]

@@ -32,52 +32,52 @@ let%expect_test "basic" =
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
-        (spec (Assoc ((image (String prepor/condo-test:good)))))
+        (spec (Assoc ((Image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
     condo_spec --> New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
-        (spec (Assoc ((image (String prepor/condo-test:good)))))
+        (spec (Assoc ((Image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
     Pulling image prepor/condo-test:good2
     condo_spec --> New state: (WaitNext
      (((id .+) (regexp)
        (spec
         ((deploy (After 1))
-         (spec (Assoc ((image (String prepor/condo-test:good)))))
+         (spec (Assoc ((Image (String prepor/condo-test:good)))))
          (health_timeout 10) (stop_timeout 10))))
       ((id .+) (regexp)
        (spec
         ((deploy (After 1))
-         (spec (Assoc ((image (String prepor/condo-test:good2)))))
+         (spec (Assoc ((Image (String prepor/condo-test:good2)))))
          (health_timeout 10) (stop_timeout 10))))))
     condo_spec --> New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
-        (spec (Assoc ((image (String prepor/condo-test:good2)))))
+        (spec (Assoc ((Image (String prepor/condo-test:good2)))))
         (health_timeout 10) (stop_timeout 10)))))
     Pulling image prepor/condo-test:bad
     condo_spec --> New state: (WaitNext
      (((id .+) (regexp)
        (spec
         ((deploy (After 1))
-         (spec (Assoc ((image (String prepor/condo-test:good2)))))
+         (spec (Assoc ((Image (String prepor/condo-test:good2)))))
          (health_timeout 10) (stop_timeout 10))))
       ((id .+) (regexp)
        (spec
         ((deploy (After 1))
-         (spec (Assoc ((image (String prepor/condo-test:bad)))))
+         (spec (Assoc ((Image (String prepor/condo-test:bad)))))
          (health_timeout 10) (stop_timeout 10))))))
     test.native: [WARNING] condo_spec --> Health checked not passed in 10 secs
     condo_spec --> New state: (TryAgainNext
      (((id .+) (regexp)
        (spec
         ((deploy (After 1))
-         (spec (Assoc ((image (String prepor/condo-test:good2)))))
+         (spec (Assoc ((Image (String prepor/condo-test:good2)))))
          (health_timeout 10) (stop_timeout 10))))
-      ((deploy (After 1)) (spec (Assoc ((image (String prepor/condo-test:bad)))))
+      ((deploy (After 1)) (spec (Assoc ((Image (String prepor/condo-test:bad)))))
        (health_timeout 10) (stop_timeout 10))
       .+)) (regexp)
     Pulling image prepor/condo-test:good
@@ -85,18 +85,18 @@ let%expect_test "basic" =
      (((id .+) (regexp)
        (spec
         ((deploy (After 1))
-         (spec (Assoc ((image (String prepor/condo-test:good2)))))
+         (spec (Assoc ((Image (String prepor/condo-test:good2)))))
          (health_timeout 10) (stop_timeout 10))))
       ((id .+) (regexp)
        (spec
         ((deploy (After 1))
-         (spec (Assoc ((image (String prepor/condo-test:good)))))
+         (spec (Assoc ((Image (String prepor/condo-test:good)))))
          (health_timeout 10) (stop_timeout 10))))))
     condo_spec --> New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
-        (spec (Assoc ((image (String prepor/condo-test:good)))))
+        (spec (Assoc ((Image (String prepor/condo-test:good)))))
         (health_timeout 10) (stop_timeout 10)))))
     condo_spec --> Stop
     condo_spec --> New state: Init |}]

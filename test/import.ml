@@ -31,7 +31,7 @@ type edn = [
 module System = Condo_system
 module Instance = Condo_instance
 module Docker = Condo_docker
-module Cancel = Condo_cancellable
+module Cancel = Cancellable
 module Spec = Condo_spec
 module Supervisor = Condo_supervisor
 
@@ -46,7 +46,7 @@ let system () =
 let read_state state_path =
   match%map try_with (fun () -> Reader.file_contents state_path
                        >>| Yojson.Safe.from_string
-                       >>| System.state_of_yojson
+                       >>| (function | `Assoc l -> Ok l | _ -> Error "Bad state")
                        >>| Result.ok_or_failwith) with
   | Ok v -> v
   | Error e ->
