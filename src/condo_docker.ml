@@ -4,7 +4,7 @@ open! Core.Std
 open! Async.Std
 
 module Utils = Condo_utils
-module Cancel = Condo_cancellable
+module Cancel = Cancellable
 
 type auth = {
   username : string;

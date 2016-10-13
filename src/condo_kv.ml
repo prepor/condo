@@ -9,7 +9,7 @@ end
 module Consul = struct
   (* We send accept header with each request, because without it consul doesn't
      work with persistent connections ^_^ *)
-  module Cancel = Condo_cancellable
+  module Cancel = Cancellable
   module Queue = Condo_window_queue
   type t = {
     id : string;

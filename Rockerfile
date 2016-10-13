@@ -3,6 +3,7 @@ FROM ocaml/opam:alpine-3.3_ocaml-4.02.3
 RUN sudo apk add --no-cache m4 perl openssl-dev
 
 RUN opam pin add -y async_http https://github.com/prepor/async-http.git
+RUN opam pin add -y cancellable https://github.com/prepor/async-cancellable
 
 COPY opam /src/opam
 RUN sudo chown -R opam /src

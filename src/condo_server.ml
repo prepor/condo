@@ -39,7 +39,7 @@ let get_global_state system =
   | Error err -> err
 
 let wait_for' system ~image ~name ~timeout =
-  let module Cancel = Condo_cancellable in
+  let module Cancel = Cancellable in
   let image_from_container container =
     let open Yojson.Basic.Util in
     container.Condo_instance.spec.Condo_spec.spec

@@ -1,10 +1,13 @@
-(* A.Signal.terminating contains hup and we need to handle it
-   separately to update Docker config (see Docker.wait_for_config_updates) *)
+
+(* TODO handle hup and reload docker config *)
+(* TODO cli interface to inspect and control instances *)
 
 let start {Condo_cli.docker_config; docker_endpoint; state_path; prefixes; expose_state; server} =
   let open Core.Std in
   let open Async.Std in
   Random.self_init ();
+  (* Signal.terminating contains hup and we need to handle it
+   separately to update Docker config (see Docker.wait_for_config_updates) *)
   let terminating = [Signal.alrm; Signal.int; Signal.term;
                      Signal.usr1; Signal.usr2] in
 

@@ -1,4 +1,4 @@
-true : bin_annot, safe_string, thread, package(core, async, edn, ppx_let, logs, logs.cli, logs.fmt, fmt.tty, fmt.cli, ppx_sexp_conv, ppx_deriving_yojson, yojson, async_http, cmdliner, cohttp.async)
+true : bin_annot, safe_string, thread, package(core, async, edn, ppx_let, logs, logs.cli, logs.fmt, fmt.tty, fmt.cli, ppx_sexp_conv, ppx_deriving_yojson, yojson, async_http, cmdliner, cohttp.async, cancellable)
 
 <src>: include
 

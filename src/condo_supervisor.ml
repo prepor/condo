@@ -5,7 +5,7 @@ type control = Stop | Suspend
 
 module StringPool = Condo_keyed_pool.Make(String)
 module Instance = Condo_instance
-module Cancel = Condo_cancellable
+module Cancel = Cancellable
 
 type t = {
   workers : (unit, unit) Cancel.t list;

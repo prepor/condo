@@ -2,7 +2,7 @@ open! Core.Std
 open! Async.Std
 
 module Docker = Condo_docker
-module Cancel = Condo_cancellable
+module Cancel = Cancellable
 module Spec = Condo_spec
 
 type container = {
@@ -84,7 +84,7 @@ let apply system spec_path snapshot control =
       | TryAgainNext (stable, _, _) -> docker_stop stable) in
     `Complete Init in
 
-  let module C = Condo_cancellable in
+  let module C = Cancellable in
 
   (* State choices *)
   let init_choices () =

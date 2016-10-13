@@ -18,6 +18,7 @@ depends: [
   "edn"
   "cohttp"
   "ppx_deriving_yojson"
+  "cancellable"
   "ocamlfind" {build}
   "ocamlbuild" {build}
   "topkg" {build}]
