@@ -93,10 +93,11 @@ let create ~system ~prefixes =
   let self = ref None in
   let on_new spec =
     let name = Condo_utils.name_from_path spec in
-    if name = "self" && SelfInstance.need_to_start spec then begin
+    let%bind content = Reader.file_contents spec in
+    if name = "self" && SelfInstance.need_to_start content then begin
       Logs.app (fun m -> m "New version of self found, deploy started");
       let%map () = suspend (Option.value_exn !self) in
-      SelfInstance.start system spec |> don't_wait_for;
+      SelfInstance.start system content |> don't_wait_for;
       None end
     else begin
       let snapshot = match Condo_system.get_snapshot system ~name with
