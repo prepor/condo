@@ -56,6 +56,16 @@ module SelfInstance = struct
     | _ -> true
 
   let start system spec =
+    let inject_hash = function
+    | `Assoc l ->
+        let envs = match List.Assoc.find l "Env" with
+        | Some `List envs -> envs
+        | None -> []
+        | _ -> failwith "Bad formatted Env in self spec" in
+        let hash = Digest.string spec |> Digest.to_hex in
+        let envs' = `List (`String (sprintf "CONDO_SELF=%s" hash)::envs) in
+        `Assoc (List.Assoc.add l "Env" envs')
+    | _ -> failwith "Bad formatted self spec" in
     match Result.try_with (fun () -> Yojson.Basic.from_string spec) with
     | Error err ->
         Logs.err (fun m -> m "Can't parse self spec: %s" (Exn.to_string err));
@@ -63,7 +73,7 @@ module SelfInstance = struct
         return ()
     | Ok spec ->
         let docker = Condo_system.docker system in
-        match%bind Condo_docker.start docker ~name:"condo" ~spec with
+        match%bind Condo_docker.start docker ~name:"condo" ~spec:(inject_hash spec) with
         | Error err ->
             Logs.err (fun m -> m "Can't start myself: %s" err);
             Shutdown.shutdown 1;
