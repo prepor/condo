@@ -66,7 +66,7 @@ module SelfInstance = struct
         let envs' = `List (`String (sprintf "CONDO_SELF=%s" hash)::envs) in
         `Assoc (List.Assoc.add l "Env" envs')
     | _ -> failwith "Bad formatted self spec" in
-    match Result.try_with (fun () -> Yojson.Basic.from_string spec) with
+    match Result.try_with (fun () -> Edn.from_string spec |> Edn.Json.to_json) with
     | Error err ->
         Logs.err (fun m -> m "Can't parse self spec: %s" (Exn.to_string err));
         Shutdown.shutdown 1;
