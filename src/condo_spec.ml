@@ -40,6 +40,8 @@ let parse_spec v =
   {deploy; spec = (Edn.Json.to_json spec); health_timeout; stop_timeout}
 
 let from_file path =
-  match%map try_with ~extract_exn:true (fun () -> Reader.file_contents path >>| Edn.from_string ) with
-  | Ok v -> parse_spec v |> Result.map_error ~f:(fun e -> Failure (sprintf "Bad specification %s: %s" path e))
+  match%map try_with ~extract_exn:true (fun () -> Reader.file_contents path
+                                         >>| Edn.from_string
+                                         >>| parse_spec ) with
+  | Ok v -> v |> Result.map_error ~f:(fun e -> Failure (sprintf "Bad specification %s: %s" path e))
   | Error e -> Error e
