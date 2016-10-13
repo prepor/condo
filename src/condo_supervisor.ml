@@ -40,7 +40,7 @@ let stop' f t =
   if t.status = `Stopped then return ()
   else begin
     t.status <- `Stopped;
-    let%bind () = Deferred.List.iter ~f:(fun v -> Cancel.cancel v ()) t.workers in
+    let%bind () = Deferred.List.iter ~how:`Parallel ~f:(fun v -> Cancel.cancel v ()) t.workers in
     Deferred.List.iter ~f (StringPool.objects t.pool)
   end
 
