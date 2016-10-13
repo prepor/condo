@@ -197,21 +197,31 @@ let actualize_snapshot system snapshot =
   | Wait container | Stable container -> begin
       match%map is_running container with
       | true -> snapshot
-      | false -> TryAgain (container.spec, (try_again_at ()))
+      | false ->
+          Logs.warn (fun m -> m "Container from state is not alive, we will try to start it later");
+          TryAgain (container.spec, (try_again_at ()))
     end
   | TryAgainNext (container, spec, at) -> begin
       match%map is_running container with
       | true -> snapshot
-      | false -> TryAgain (spec, at)
+      | false ->
+          Logs.warn (fun m -> m "Stable container from state is not alive, we will try to start it later");
+          TryAgain (spec, at)
     end
   | WaitNext (stable, next) -> begin
       let%bind is_running_stable = is_running stable in
       let%map is_running_next = is_running next in
       match is_running_stable, is_running_next with
       | true, true -> snapshot
-      | false, true -> Wait next
-      | true, false -> TryAgainNext (stable, next.spec, try_again_at ())
-      | false, false -> TryAgain (next.spec, try_again_at ())
+      | false, true ->
+          Logs.warn (fun m -> m "Stable container from state is not alive, we will wait for the next");
+          Wait next
+      | true, false ->
+          Logs.warn (fun m -> m "Next container is not alive, we will try to start it later");
+          TryAgainNext (stable, next.spec, try_again_at ())
+      | false, false ->
+          Logs.warn (fun m -> m "Containers from state is not alive, we will try to start one of them later");
+          TryAgain (next.spec, try_again_at ())
     end
 
 let create ?on_stable system ~spec ~snapshot =
