@@ -170,11 +170,11 @@ let apply system ?on_stable spec_path snapshot control =
   | Stable container -> stable_choices container
   | WaitNext (stable, next) -> wait_next_choices stable next
   | TryAgainNext (stable, spec, at) -> try_again_next_choices stable spec at in
-  let%bind () = match on_stable, snapshot with
-  | Some f, (Stable _ as snapshot) -> f snapshot
-  | _ -> return () in
   let%bind res = apply_choices choices in
   let snapshot' = match res with | `Continue v | `Complete v -> v in
+  let%bind () = match on_stable, snapshot' with
+  | Some f, (Stable _) -> f snapshot'
+  | _ -> return () in
   let%map () =
     Logs.app (fun m -> m "%s --> New state: %s" name (snapshot' |> sexp_of_snapshot |> Sexp.to_string_hum));
     Condo_system.place_snapshot system ~name ~snapshot:(snapshot' |> snapshot_to_yojson) in
@@ -200,18 +200,18 @@ let actualize_snapshot system snapshot =
       | false -> TryAgain (container.spec, (try_again_at ()))
     end
   | TryAgainNext (container, spec, at) -> begin
-            match%map is_running container with
+      match%map is_running container with
       | true -> snapshot
       | false -> TryAgain (spec, at)
     end
   | WaitNext (stable, next) -> begin
       let%bind is_running_stable = is_running stable in
       let%map is_running_next = is_running next in
-            match is_running_stable, is_running_next with
-        | true, true -> snapshot
-        | false, true -> Wait next
-        | true, false -> TryAgainNext (stable, next.spec, try_again_at ())
-        | false, false -> TryAgain (next.spec, try_again_at ())
+      match is_running_stable, is_running_next with
+      | true, true -> snapshot
+      | false, true -> Wait next
+      | true, false -> TryAgainNext (stable, next.spec, try_again_at ())
+      | false, false -> TryAgain (next.spec, try_again_at ())
     end
 
 let create ?on_stable system ~spec ~snapshot =
