@@ -229,5 +229,5 @@ let create system ~spec ~snapshot =
   let worker =
     let open Cancel.Let_syntax in
     let%bind snapshot' = actualize_snapshot system snapshot |> Cancel.defer in
-    Cancel.worker ?sleep:None ~tick snapshot' in
+    Cancel.worker ~tick snapshot' in
   {worker}
