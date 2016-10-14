@@ -22,7 +22,7 @@ RUN eval `opam config env` && topkg build
 USER root
 
 EXPORT ./_build/src/condo.native condo.native
-EXPORT /home/opam/system/bin/multi-consul-template multi-consul-template
+EXPORT /home/opam/.opam/system/bin/multi-consul-template multi-consul-template
 
 FROM gliderlabs/alpine:3.4
 
