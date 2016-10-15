@@ -34,8 +34,8 @@ let parse_spec v =
   let%bind stop_timeout = int_field v "health-timeout" ~default:10 in
   let%map deploy = match deploy' with
   | `Null -> Ok Before
-  | `Vector [`Keyword (None, "after"); `Int timeout] -> Ok (After timeout)
-  | `Vector [`Keyword (None, "before")] -> Ok Before
+  | `Vector [`Keyword (None, "After"); `Int timeout] -> Ok (After timeout)
+  | `Vector [`Keyword (None, "Before")] -> Ok Before
   | _ -> Error "`deploy` option should be [:Before] or [:After timeout] where timeout is number of seconds before previous container termination" in
   {deploy; spec = (Edn.Json.to_json spec); health_timeout; stop_timeout}
 
