@@ -30,7 +30,7 @@ IMPORT condo.native /usr/bin/condo
 
 VOLUME ["/var/lib/condo"]
 EXPOSE 80
-CMD exec condo /var/lib/condo -s /var/lib/condo/state --server 80 $CONDO_ARGS
+ENTRYPOINT ["condo", "/var/lib/condo", "-s", "/var/lib/condo/state", "--server", "80"]
 
 PUSH prepor/condo:{{ .Version }}
 
@@ -46,6 +46,6 @@ ADD https://releases.hashicorp.com/consul-template/0.16.0/consul-template_0.16.0
 
 RUN unzip /tmp/consul-template_0.16.0_linux_amd64.zip -d /usr/bin/
 
-CMD ["/start.sh"]
+ENTRYPOINT ["/start.sh"]
 
 PUSH prepor/condo:plus-{{ .Version }}
