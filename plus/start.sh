@@ -19,4 +19,4 @@ EOF
 
 multi-consul-template -c /var/lib/condo/consul-template.conf --consul-endpoint tcp://$CONSUL_ENDPOINT $MULTI_CT_ARGS $prefixes &
 
-exec condo /var/lib/condo /var/lib/condo -s /var/lib/condo/state --server 80 --consul-endpoint tcp://$CONSUL_ENDPOINT $CONDO_ARGS
+exec condo /var/lib/condo -s /var/lib/condo/state --server 80 --consul-endpoint tcp://$CONSUL_ENDPOINT $CONDO_ARGS
