@@ -34,8 +34,9 @@ let receive_state ?prefix system =
   | None -> Error (error_response ~status:`Bad_request "State exposing is not configured")
 
 let get_global_state system =
+  let f = (fun (k,v) -> `List [`String k; (System.global_data_to_yojson v)]) in
   match%map receive_state system with
-  | Ok state -> json_response (`List (List.map state ~f:(fun (k,v) -> `List [`String k; v])))
+  | Ok state -> json_response (`List (List.map state ~f))
   | Error err -> err
 
 let wait_for' system ~image ~name ~timeout =
@@ -50,9 +51,9 @@ let wait_for' system ~image ~name ~timeout =
     | Stable container -> image_from_container container
     | _ -> None in
   let find_in_state state =
-    let f (name', instance_state) =
+    let f (name', global_data) =
       if name <> name' then false
-      else (match Condo_instance.parse_snapshot instance_state with
+      else (match Condo_instance.parse_snapshot (global_data.System.snapshot) with
         | Error err ->
             Logs.err (fun m -> m "Error while parsing instance state %s: %s" name' err);
             false

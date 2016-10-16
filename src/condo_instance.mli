@@ -5,7 +5,9 @@ type t
 
 type container = {
   id : Condo_docker.id;
-  spec : Condo_spec.t
+  spec : Condo_spec.t;
+  created_at : float;
+  stable_at : float option;
 } [@@deriving sexp]
 
 type snapshot = | Init

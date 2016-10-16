@@ -1,8 +1,5 @@
 
-(* TODO handle hup and reload docker config *)
-(* TODO cli interface to inspect and control instances *)
-
-let start {Condo_cli.docker_config; docker_endpoint; state_path; prefixes; expose_state; server} =
+let start {Condo_cli.docker_config; docker_endpoint; state_path; prefixes; expose_state; server; host} =
   let open Core.Std in
   let open Async.Std in
   Random.self_init ();
@@ -13,7 +10,7 @@ let start {Condo_cli.docker_config; docker_endpoint; state_path; prefixes; expos
 
   (let%map system = Condo_system.create ~state_path
        ~docker_config ~docker_endpoint
-       ~expose_state in
+       ~expose_state ~host in
    let supervisor = Condo_supervisor.create ~system ~prefixes in
    (match server with
    | Some port -> Condo_server.create system ~port |> Deferred.ignore

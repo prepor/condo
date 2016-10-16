@@ -45,6 +45,10 @@ let expose_state =
     Arg.(value & opt string "/condo" & info ["consul-prefix"] ~docv:"PATH") in
   Term.(const config $ enum $ consul_endpoint $ consul_prefix)
 
+let host =
+  let doc = "Name of current host. Can be used in exposed state" in
+  Arg.(value & opt (some string) None & info ["host"] ~doc)
+
 let server =
   let doc = "Start HTTP server" in
   Arg.(value & opt (some int) None & info ["server"] ~docv:"PORT" ~doc)
@@ -55,11 +59,12 @@ type t = {
   state_path : string;
   prefixes : string list;
   expose_state : [`No | `Consul of (Async_http.addr * string)];
-  server : int option
+  server : int option;
+  host : string option;
 }
 
-let config docker_endpoint docker_config state_path prefixes expose_state server () =
-  {docker_endpoint; docker_config; state_path; prefixes; expose_state; server}
+let config docker_endpoint docker_config state_path prefixes expose_state server host () =
+  {docker_endpoint; docker_config; state_path; prefixes; expose_state; server; host}
 
 let setup_log =
   let setup style_renderer level =
@@ -71,5 +76,5 @@ let setup_log =
 
 let cmd =
   let doc = "Good daddy for docker containers" in
-  Term.(const config $ docker_endpoint $ docker_config $ state_path $ prefixes $ expose_state $ server $ setup_log),
+  Term.(const config $ docker_endpoint $ docker_config $ state_path $ prefixes $ expose_state $ server $ host $ setup_log),
   Term.info "condo" ~doc

@@ -7,7 +7,9 @@ module Spec = Condo_spec
 
 type container = {
   id : Docker.id;
-  spec : Spec.t
+  spec : Spec.t;
+  created_at : float;
+  stable_at : float option;
 } [@@deriving sexp, yojson]
 
 type snapshot = | Init
@@ -43,6 +45,8 @@ let read_new_spec path current =
     else `Complete spec in
   Cancel.worker ~sleep:1000 ~tick ()
 
+let now () = Time.(now () |> to_epoch)
+
 let try_again_at () =
   Time.(add (now ()) (Span.of_int_sec 10) |> to_epoch)
 
@@ -56,7 +60,7 @@ let apply system spec_path snapshot control =
   (* Common actions *)
   let wait_or_try_again spec =
     match%map Docker.start docker ~name ~spec:spec.Spec.spec with
-    | Ok id -> `Continue (Wait {id; spec})
+    | Ok id -> `Continue (Wait {id; spec; created_at = now (); stable_at = None})
     | Error e ->
         Logs.err (fun m -> m "%s --> Error while starting container: %s" name e);
         `Continue (TryAgain (spec, try_again_at ())) in
@@ -67,7 +71,7 @@ let apply system spec_path snapshot control =
         wait_or_try_again spec
     | Spec.After _ ->
         match%map Docker.start docker ~name ~spec:spec.Spec.spec with
-        | Ok id -> `Continue (WaitNext (stable, {id; spec}))
+        | Ok id -> `Continue (WaitNext (stable, {id; spec; created_at = now (); stable_at = None}))
         | Error e ->
             Logs.err (fun m -> m "%s --> Error while starting container: %s" name e);
             `Continue (TryAgainNext (stable, spec, try_again_at ())) in
@@ -100,7 +104,7 @@ let apply system spec_path snapshot control =
       wait_or_try_again spec in
     C.([new_spec --> stop_and_start;
         health_check --> (function
-          | `Passed -> `Continue (Stable container) |> Deferred.return
+          | `Passed -> `Continue (Stable {container with stable_at = Some (now ())}) |> Deferred.return
           | `Not_passed ->
               Logs.warn (fun m -> m "%s --> Health checked not passed in %i secs" name timeout);
               `Continue (TryAgain (container.spec, try_again_at ()))
@@ -127,7 +131,7 @@ let apply system spec_path snapshot control =
           | Spec.After timeout ->
               let%bind () = docker_stop next in
               match%map Docker.start docker ~name ~spec:spec.Spec.spec with
-              | Ok id -> `Continue (WaitNext (stable, {id; spec}))
+              | Ok id -> `Continue (WaitNext (stable, {id; spec; created_at = now (); stable_at = None}))
               | Error e ->
                   Logs.err (fun m -> m "%s --> Error while starting container: %s" name e);
                   `Continue (TryAgainNext (stable, spec, try_again_at ())));

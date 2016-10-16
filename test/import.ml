@@ -42,6 +42,7 @@ let system () =
     ~docker_config:None
     ~state_path:"/tmp/condo_state"
     ~expose_state:`No
+    ~host:None
 
 let read_state state_path =
   match%map try_with (fun () -> Reader.file_contents state_path

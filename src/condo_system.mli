@@ -7,6 +7,7 @@ val create :
   docker_config: string option ->
   state_path: string ->
   expose_state: [`No | `Consul of (Async_http.addr * string)] ->
+  host: string option ->
   t Deferred.t
 
 val docker : t -> Condo_docker.t
@@ -19,6 +20,15 @@ type state = (string * Yojson.Safe.json) list [@@deriving yojson]
 
 val get_state : t -> state
 
-val get_global_state : ?prefix:string -> t -> (state, string) Result.t option Deferred.t 
+type meta = { host : string } [@@deriving yojson]
+
+type global_data = {
+  snapshot : Yojson.Safe.json;
+  meta : meta
+} [@@deriving yojson]
+
+type global_state = (string * global_data) list [@@deriving yojson]
+
+val get_global_state : ?prefix:string -> t -> (global_state, string) Result.t option Deferred.t
 
 
