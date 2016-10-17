@@ -31,7 +31,7 @@ let parse_spec v =
   | _ -> Error "`spec` keyword with map is required" in
   let deploy' = Edn.Util.(v |> member (`Keyword (None, "deploy"))) in
   let%bind health_timeout = int_field v "health-timeout" ~default:10 in
-  let%bind stop_timeout = int_field v "health-timeout" ~default:10 in
+  let%bind stop_timeout = int_field v "stop-timeout" ~default:10 in
   let%map deploy = match deploy' with
   | `Null -> Ok Before
   | `Vector [`Keyword (None, "After"); `Int timeout] -> Ok (After timeout)
