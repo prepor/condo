@@ -27,7 +27,7 @@ let state_path =
   Arg.(required & opt (some string) None & info ["s"; "state"] ~docv:"STATE_PATH" ~doc)
 
 let prefixes =
-  let doc = "Directories with container specifications" in
+  let doc = "Directory with container specifications" in
   Arg.(non_empty & pos_all dir [] & info [] ~docv:"PREFIX" ~doc)
 
 let expose_state =

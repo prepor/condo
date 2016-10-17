@@ -155,7 +155,7 @@ let apply system spec_path snapshot control =
     let timeout = (Clock.at (Time.of_epoch at) |> C.defer) in
     C.[
       new_spec --> (wait_next_or_try_again stable);
-      timeout --> (fun () -> wait_or_try_again spec)] in
+      timeout --> (fun () -> wait_next_or_try_again stable spec)] in
   let apply_choices choices =
     C.choose (C.choice control' (function
       | Stop ->
