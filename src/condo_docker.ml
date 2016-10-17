@@ -166,7 +166,7 @@ let delete_container t name =
   ()
 
 let create_container t name spec =
-  let name' = match Yojson.Basic.Util.(spec |> member "name" |> to_string_option) with
+  let name' = match Yojson.Basic.Util.(spec |> member "Name" |> to_string_option) with
   | Some v -> v
   | None -> (sprintf "%s_%s" name (Utils.random_str 10)) in
   let%bind () = delete_container t name' in
