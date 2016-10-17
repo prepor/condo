@@ -100,11 +100,14 @@ our Quickstart section.
 
 ### consul-template
 
+https://github.com/hashicorp/consul-template
+
 We can use consul-template to generate specifications. One of the
 nicest properties of this is that we can store current version of the container
 inside Consul and dynamically change it for all instances.
 
-    echo '{:spec {:Image "nginx:{{key_or_default "/versions/nginx" "1.11.5-alpine"}}"} :deploy [:After 5]}' > /tmp/condo_specs/nginx.edn.ctmpl
+    echo '{:spec {:Image "nginx:{{key_or_default "/versions/nginx" "1.11.5-alpine"}}"} :deploy [:After 5]}
+         ' > /tmp/condo_specs/nginx.edn.ctmpl
 
     echo '{:spec {:Name "consul" :Image "consul:v0.7.0"
                   :Cmd ["agent" "-dev" "-client=0.0.0.0"]
@@ -125,7 +128,12 @@ Now we can deploy nginx via curl! ;)
 We can add this line, for example, to CI and deploy (and undeploy) new versions
 of application manually or automatically.
 
+You can also do service discovery via ENV variables or support HA postgres
+with [patroni](https://github.com/zalando/patroni).
+
 ### nginx-proxy
+
+https://github.com/jwilder/nginx-proxy
 
 Our nginx instances don't expose any ports into host machine, that's why we can
 run them in parallel while deploying. With nginx-proxy, we can expose one static port for them.
@@ -143,6 +151,8 @@ run them in parallel while deploying. With nginx-proxy, we can expose one static
 Now `curl localhost:8000` sends requests to currently deployed container
 
 ### docker-registrator
+
+https://github.com/gliderlabs/registrator
 
 Docker registrator registers containers as service in different service discovery
 registries, for example, consul.
