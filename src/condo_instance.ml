@@ -117,8 +117,7 @@ let apply system spec_path snapshot control =
      timeout --> (fun () -> wait_or_try_again spec)] in
   let stable_choices container =
     let new_spec = (read_new_spec spec_path container.spec) in
-    C.[
-      new_spec --> (wait_next_or_try_again container)] in
+    C.[new_spec --> (wait_next_or_try_again container)] in
   let wait_next_choices stable next =
     let timeout = next.spec.Spec.health_timeout in
     [C.choice (read_new_spec spec_path next.spec)

@@ -1,3 +1,5 @@
+(* TODO add remove_after_stop option *)
+(* TODO remove Init snapshots from state *)
 
 let start {Condo_cli.docker_config; docker_endpoint; state_path; prefixes; expose_state; server; host} =
   let open Core.Std in
