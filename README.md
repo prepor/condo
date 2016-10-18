@@ -49,7 +49,7 @@ Now we will try to deploy new version of this image:
 
     echo '{:spec {:Image "nginx:oops-alpine"} :deploy [:After 5]}' > /tmp/condo_specs/nginx.edn
     
-Oops, there is a typo and we have an error "Tag oops-alpine not found in repository" and current state now is TryAgainNext. Condo will try to deploy this spec untill it is successful or new specification arrives. And note that we still have nginx:1.11.5-alpine being running. It's because we've specified `:deploy [:After 5]` option, and a new container tries to start in parallel with the previous one.
+Oops, there is a typo and we have an error "Tag oops-alpine not found in repository" and current state now is TryAgainNext. Condo will try to deploy this spec until it is successful or new specification arrives. And note that we still have nginx:1.11.5-alpine being running. It's because we've specified `:deploy [:After 5]` option, and a new container tries to start in parallel with the previous one.
 
 Let's fix the typo:
 
@@ -71,12 +71,12 @@ The only required field inside this description is `:Image`.
 
 Optional parameters:
 * `:deploy` (default `[:Before]`). Can be `[:Before]` or `[:After n]` where `n`
-  is a number of seconds before stopping previous container after the successful start of
+  is a number of seconds before stopping the previous container after the successful start of
   the new one.
 * `:health-timeout` in seconds (default 10). It's how long condo will wait for passed
   healthchecks.
 * `:stop-timeout` in seconds (default 10). It will be passed into `/stop` docker
-  operation. It's how long it will wait before force-stop of container.
+  operation. It's how long it will wait before force-stop of a container.
   
 ## HTTP API
 
@@ -133,7 +133,7 @@ with [patroni](https://github.com/zalando/patroni).
 
 https://github.com/jwilder/nginx-proxy
 
-Our nginx instances don't expose any ports into host machine, that's why we can
+Our nginx instances don't expose any ports into a host machine, that's why we can
 run them in parallel while deploying. With nginx-proxy, we can expose one static port for them.
 
     echo '{:spec {:Image "nginx:1.11.5-alpine"
@@ -170,7 +170,7 @@ information can be used by some external load balancer.
  
 ## Self-deploying
 
-Condo supports special specification file -- `self.edn`. After it is updated, condo suspends all other updates and starts new container by this specification, and after that, gracefully stops itself.
+Condo supports special specification file -- `self.edn`. After it is updated, condo suspends all other updates and starts new container by this specification, and after that gracefully stops itself.
 
 Be careful, the format of this specification is different, because it contains only docker-container specification (which is usually inside `:spec keyword`).
 
