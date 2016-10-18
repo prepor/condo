@@ -239,6 +239,7 @@ You need OCaml 4.02.3
 * Andrew Rudenko @prepor
 * Alexey Kuleshov @superkonduktr
 * Roman Sokolov @little-arhat
+* Galina Dautova @galinad
 
 Thank [Flocktory](https://github.com/flocktory/)
 and [HealthSamurai](https://github.com/HealthSamurai) for support of development
