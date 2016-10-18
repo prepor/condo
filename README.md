@@ -3,27 +3,27 @@ condo
 ![Condo](http://c1.staticflickr.com/5/4040/5141512500_613bde41aa_z.jpg)
 
 Condo is a simple idempotent supervisor for Docker containers. It can be used as
-basic brick to build reliable and declarative systems without complex and smart
+a basic brick to build reliable and declarative systems without complex and smart
 schedulers like Kubernetes, but in combination with tools like nginx-proxy,
 consul-template, docker-.
 
 ## Features
 
-* Watch directories and start docker container for each specification inside them
-* React to any changes in these directories and specifications (adding, removing
+* Watches directories and starts docker container for each specification inside them
+* Reacts on any changes in these directories and specifications (adding, removing
   and updating of specifications)
-* Zero downtime deploys with enabled `:After` option. It starts new container *in parallel* with the
-  previous one. And stops the previous only after the new one is successfully
+* Zero downtime deployment with `:After` option enabled. It starts a new container *simultaneously* with 
+  the old one. And stops the old one only after the new one is successfully
   started (including healthchecks)
-* Support Healthchecks feature of docker (from 1.12). It considers container as
-  Stable only then healthchecks are passed
-* Manage persistent state of itself. You can kill -9 condo and start it again,
+* Supports Healthchecks feature of docker (from 1.12). It considers a container as
+  a Stable one only after healthchecks are passed
+* Manages persistent state of itself. You can kill -9 condo and start it again,
   everything will be fine
-* Expose it state into external storage (e.g. Consul). It can be used for
-  monitoring of overall system, higher level orchestration, etc.
-* Understand Docker authentification config file (~/.docker/config.json usually)
-* Provide http-endpoint to track deploy status of service (/v1/wait_for)
-* Nice UI for state of current daemon and all system (if state exposing is enabled) TODO: it's broken now
+* Exposes its state into external storage (e.g. Consul). It can be used for
+  monitoring of entire system, higher level orchestration, etc.
+* Understands Docker authentification config file (~/.docker/config.json usually)
+* Provides http-endpoint to track deploy status of a service (/v1/wait_for)
+* Nice UI for exploring the state of current daemon and entire system (if state exposing is enabled) TODO: it's broken now
 * Container specification is fully opaque for condo, it has the same format as [docker's remote API](https://docs.docker.com/engine/reference/api/docker_remote_api_v1.24/#create-a-container),
   so there is no additional point of indirection and you can use all docker's
   features (even unreleased)
@@ -49,7 +49,7 @@ Now we will try to deploy new version of this image:
 
     echo '{:spec {:Image "nginx:oops-alpine"} :deploy [:After 5]}' > /tmp/condo_specs/nginx.edn
     
-Oops, there is a typo and we have error "Tag oops-alpine not found in repository" and current state now is TryAgainNext. Condo will try to deploy this spec untill it is successful or new specification arrives. And note that we've still had running nginx:1.11.5-alpine. It's because we specify `:deploy [:After 5]` option, and new container tries to start in parallel with the previous one.
+Oops, there is a typo and we have an error "Tag oops-alpine not found in repository" and current state now is TryAgainNext. Condo will try to deploy this spec untill it is successful or new specification arrives. And note that we still have nginx:1.11.5-alpine being running. It's because we've specified `:deploy [:After 5]` option, and a new container tries to start in parallel with the previous one.
 
 Let's fix the typo:
 
@@ -57,15 +57,13 @@ Let's fix the typo:
     
 Yep, now it's deployed, the previous container was stopped.
 
-That's, basically, core functionality of condo ;)
+That's, basically, the core functionality of condo ;)
 
 ## Specification format
 
 Condo watches for *.edn files in all directories defined as PREFIXes via command line interface.
 
-It has only one required parameter `:spec`. It contains docker container
-description in a format
-of
+It has only one required parameter `:spec`. It contains docker container description in a format of
 [docker's remote API](https://docs.docker.com/engine/reference/api/docker_remote_api_v1.24/#create-a-container).
 The only required field inside this description is `:Image`.
 
@@ -89,7 +87,7 @@ See `How it works` for definition of state
   into external storage is configured)
 * `/v1/wait_for` wait for the stable state of service in all condo instances. 
   Query params: 
-  * `name` name of service
+  * `name` the name of the service
   * `timeout` how long to wait in seconds. Returns 500 after `timeout`
   * `image` which image we are waiting for
 
@@ -154,7 +152,7 @@ Now `curl localhost:8000` sends requests to currently deployed container
 
 https://github.com/gliderlabs/registrator
 
-Docker registrator registers containers as service in different service discovery
+Docker registrator registers containers as a service in different service discovery
 registries, for example, consul.
 
     echo '{:spec {:Image "nginx:1.11.5-alpine"
@@ -186,19 +184,19 @@ Example:
 
 ## Best practices
 
-* Define healthchecks. Without it, condo considers container as successfully
+* Define healthchecks. Without them, condo considers a container as successfully
   started even if it was crashed in a second
-* Use restart strategies. Condo doesn't monitor container after it has successfully
+* Use restart strategies. Condo doesn't monitor a container after it has successfully
   started. But docker daemon does. You can restart containers by
   `:RestartPolicy` option of `HostConfig`, for example `:RestartPolicy {:Name
   "on-failure"}`
   
 ## How it works
 
-One of the main reasons why condo exists is because deploy tool should be
+One of the main reasons why condo exists is because a deploy tool should be
 simple and understandable by all users. Not sure that anyone really knows what
 Kubernetes does in each case (1 500 000 lines of code by the way!). Condo is
-basically simple state machine for each service:
+basically a simple state machine for each service:
 
 ![Fsm](doc/fsm.png)
 
@@ -241,5 +239,5 @@ You need OCaml 4.02.3
 * Roman Sokolov @little-arhat
 * Galina Dautova @galinad
 
-Thank [Flocktory](https://github.com/flocktory/)
-and [HealthSamurai](https://github.com/HealthSamurai) for support of development
+Thanks to [Flocktory](https://github.com/flocktory/)
+and [HealthSamurai](https://github.com/HealthSamurai) for support of the development
