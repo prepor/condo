@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -ex
+
+docker build -t prepor/condo-test:good -f Dockerfile_good .
+docker build -t prepor/condo-test:good2 -f Dockerfile_good .
+docker build -t prepor/condo-test:bad -f Dockerfile_bad .
+
+docker push prepor/condo-test:good
+docker push prepor/condo-test:good2
+docker push prepor/condo-test:bad

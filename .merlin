@@ -1,12 +1,7 @@
-PKG yojson core ppx_deriving.std ppx_deriving_yojson async cohttp cohttp.async cmdliner mustache dispatch ppx_getenv re2 edn ppx_sexp_conv ppx_let ppx_compare ounit
-
-S common
-B _build/common
-
-S condo
-B _build/condo
-
-S monitoring
-B _build/monitoring
+PKG bytes async core logs logs.fmt logs.cli edn yojson async_http topkg ppx_deriving_yojson ppx_sexp_conv ppx_let cmdliner cohttp.async cancellable
+S src
+S test
+B _build/**
 
 FLG -short-paths
+

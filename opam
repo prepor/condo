@@ -1,0 +1,28 @@
+opam-version: "1.2"
+maintainer: "Andrew Rudenko <ceo@prepor.ru>"
+authors: ["Andrew Rudenko <ceo@prepor.ru>"]
+homepage: "https://github.com/prepor/condo"
+doc: "https://prepor.github.io/condo/doc"
+license: "ISC"
+dev-repo: "https://github.com/prepor/condo.git"
+bug-reports: "https://github.com/prepor/condo/issues"
+tags: []
+available: [ ocaml-version >= "4.01.0"]
+depends: [
+  "core"
+  "async"
+  "fmt"
+  "logs"
+  "cmdliner"
+  "async_http"
+  "edn"
+  "cohttp"
+  "ppx_deriving_yojson"
+  "cancellable"
+  "ocamlfind" {build}
+  "ocamlbuild" {build}
+  "topkg" {build}]
+depopts: []
+build: [
+  "ocaml" "pkg/pkg.ml" "build"
+          "--pinned" pinned ]

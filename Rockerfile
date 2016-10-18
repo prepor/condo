@@ -1,0 +1,51 @@
+FROM ocaml/opam:alpine-3.3_ocaml-4.02.3
+
+RUN sudo apk add --no-cache m4 perl openssl-dev
+
+RUN opam pin add -y async_http https://github.com/prepor/async-http.git
+RUN opam pin add -y cancellable https://github.com/prepor/async-cancellable.git
+RUN opam pin add -y multi-consul-template https://github.com/prepor/multi-consul-template.git
+
+COPY opam /src/opam
+RUN sudo chown -R opam /src
+WORKDIR /src
+
+RUN opam pin add -ny condo .
+RUN opam install -y --deps-only condo
+RUN opam install -y topkg-care
+
+COPY . /src
+RUN sudo chown -R opam /src
+
+RUN eval `opam config env` && topkg build
+
+USER root
+
+EXPORT ./_build/src/condo.native condo.native
+EXPORT /home/opam/.opam/system/bin/multi-consul-template multi-consul-template
+
+FROM gliderlabs/alpine:3.4
+
+IMPORT condo.native /usr/bin/condo
+
+VOLUME ["/var/lib/condo"]
+EXPOSE 80
+ENTRYPOINT ["condo", "/var/lib/condo", "-s", "/var/lib/condo/state", "--server", "80"]
+
+PUSH prepor/condo:{{ .Version }}
+
+FROM prepor/condo:{{ .Version }}
+
+RUN apk add --no-cache bash
+
+COPY plus/start.sh /start.sh
+
+IMPORT multi-consul-template /usr/bin/multi-consul-template
+
+ADD https://releases.hashicorp.com/consul-template/0.16.0/consul-template_0.16.0_linux_amd64.zip /tmp/consul-template_0.16.0_linux_amd64.zip
+
+RUN unzip /tmp/consul-template_0.16.0_linux_amd64.zip -d /usr/bin/
+
+ENTRYPOINT ["/start.sh"]
+
+PUSH prepor/condo:plus-{{ .Version }}

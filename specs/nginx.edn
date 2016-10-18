@@ -1,0 +1,2 @@
+{:spec {:image "nginx"
+        :environment {:FOO "bar"}}}

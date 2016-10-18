@@ -1,8 +1,0 @@
-#!/bin/bash
-
-set -ex
-
-VERSION=4.02.3
-REPO=prepor/ocaml:$VERSION
-docker build -t $REPO .
-# docker push $REPO

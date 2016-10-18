@@ -1,0 +1,6 @@
+[nginx]
+
+[nginx.environment]
+foo = "bar"
+
+
