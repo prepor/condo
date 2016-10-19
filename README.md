@@ -37,7 +37,7 @@ Now we will try to deploy a new version of this image:
 
     echo '{:spec {:Image "nginx:oops-alpine"} :deploy [:After 5]}' > /tmp/condo_specs/nginx.edn
     
-Oops, there is a typo and we have an error: `Tag oops-alpine not found in repository`. The current state now is `TryAgainNext`. Condo will try to deploy this spec until it is successful or until a new specification arrives. Note that we still have `nginx:1.11.5-alpine` running – that's because we've specified the `:deploy [:After 5]` option, and the new container tries to start in parallel with the previous one.
+Oops, there is a typo and we have an error: `Tag oops-alpine not found in repository`. The current state now is `TryAgainNext`. Condo will try to deploy this spec until it is successful or until a new specification arrives. Note that we still have `nginx:1.11.4-alpine` running – that's because we've specified the `:deploy [:After 5]` option, and the new container tries to start in parallel with the previous one.
 
 Let's fix the typo:
 
