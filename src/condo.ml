@@ -5,7 +5,7 @@ let start {Condo_cli.docker_config; docker_endpoint; state_path; prefixes;
            expose_state; server; host; ui_prefix} =
   let open Core.Std in
   let open Async.Std in
-
+  Gc.tune ~max_overhead:0 ~space_overhead:10 ();
   Random.self_init ();
   (* Signal.terminating contains hup and we need to handle it
    separately to update Docker config (see Docker.wait_for_config_updates) *)
