@@ -56,7 +56,7 @@ let is_running t id =
   let%map res = Async_http.(request_of_addr t.endpoint
                             |> path (sprintf "/containers/%s/json" id)
                             |> parser (fun v ->
-                                let open Yojson.Basic in
+                                let open Yojson.Safe in
                                 let json = from_string v in
                                 Util.(json
                                       |> member "State"
@@ -84,7 +84,7 @@ let wait_healthchecks t id ~timeout =
     let%map res = Async_http.(request_of_addr t.endpoint
                               |> path (sprintf "/containers/%s/json" id)
                               |> parser (fun v ->
-                                  let open Yojson.Basic in
+                                  let open Yojson.Safe in
                                   let json = from_string v in
                                   let open Util in
                                   let state = json |> member "State" in
@@ -129,7 +129,7 @@ let not_200_as_error res =
   else Error (sprintf "Error while docker request (status %i): %s" status body)
 
 let extract_image spec =
-  Yojson.Basic.Util.(spec |> member "Image" |> to_string_option)
+  Yojson.Safe.Util.(spec |> member "Image" |> to_string_option)
   |> Result.of_option ~error:"Can't find image in spec"
   |> return
 
@@ -166,7 +166,7 @@ let delete_container t name =
   ()
 
 let create_container t name spec =
-  let name' = match Yojson.Basic.Util.(spec |> member "Name" |> to_string_option) with
+  let name' = match Yojson.Safe.Util.(spec |> member "Name" |> to_string_option) with
   | Some v -> v
   | None -> (sprintf "%s_%s" name (Utils.random_str 10)) in
   let%bind () = delete_container t name' in
@@ -174,7 +174,7 @@ let create_container t name spec =
                             |> path "/containers/create"
                             |> query_param "name" name'
                             |> header "Content-Type" "application/json"
-                            |> body (Yojson.Basic.to_string spec )
+                            |> body (Yojson.Safe.to_string spec)
                             |> parser (fun v -> Yojson.Basic.(from_string v
                                                               |> Util.member "Id"
                                                               |> Util.to_string))

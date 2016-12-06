@@ -76,7 +76,7 @@ let wait_for_image name image spec_extractor =
   let checker snapshot =
     match spec_extractor snapshot with
     | Some spec -> if
-      image = Yojson.Basic.Util.(spec.Spec.spec |> member "Image" |> to_string)
+      image = Yojson.Safe.Util.(spec.Spec.spec |> member "Image" |> to_string)
         then true
         else false
     | None -> false in

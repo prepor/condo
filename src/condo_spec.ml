@@ -9,14 +9,26 @@ type json = [ `Assoc of (string * json) list
             | `Int of int
             | `List of json list
             | `Null
-            | `String of string ] [@@deriving sexp, yojson]
+            | `String of string ] [@@deriving sexp]
+
+module Json = struct
+  include Yojson.Safe
+
+  let json_to_yojson v = v
+  let json_of_yojson v = Ok v
+
+  let json_of_sexp v = (json_of_sexp v :> Yojson.Safe.json)
+
+  let sexp_of_json v = sexp_of_json (Yojson.Safe.to_basic v)
+
+end
 
 type t = {
   deploy : deploy_strategy;
-  spec : json;
+  spec : Json.json;
   health_timeout : int;
   stop_timeout : int;
-} [@@deriving sexp, yojson]
+} [@@deriving yojson, sexp]
 
 let int_field v k ~default =
   match Edn.Util.(v |> member (`Keyword (None, k))) with
@@ -37,7 +49,8 @@ let parse_spec v =
   | `Vector [`Keyword (None, "After"); `Int timeout] -> Ok (After timeout)
   | `Vector [`Keyword (None, "Before")] -> Ok Before
   | _ -> Error "`deploy` option should be [:Before] or [:After timeout] where timeout is number of seconds before previous container termination" in
-  {deploy; spec = (Edn.Json.to_json spec); health_timeout; stop_timeout}
+  {deploy; health_timeout; stop_timeout;
+  spec = (Edn.Json.to_json spec :> Yojson.Safe.json); }
 
 let from_file path =
   match%map try_with ~extract_exn:true (fun () -> Reader.file_contents path

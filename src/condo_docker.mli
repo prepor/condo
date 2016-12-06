@@ -8,7 +8,7 @@ val create : endpoint:Async_http.addr -> config_path:string option -> t Deferred
 
 val reload_config : t -> unit Deferred.t
 
-val start : t -> name:string -> spec:Yojson.Basic.json -> (id, string) Result.t Deferred.t
+val start : t -> name:string -> spec:Yojson.Safe.json -> (id, string) Result.t Deferred.t
 
 val stop : t -> id -> timeout:int -> unit Deferred.t
 

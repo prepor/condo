@@ -25,7 +25,8 @@ let create ~docker_endpoint ~docker_config ~state_path ~expose_state ~host =
   let kv = match expose_state with
   | `No -> None
   | `Consul (endpoint, prefix) -> Some (Condo_kv.consul ~endpoint ~prefix) in
-  {docker; state_path; state; kv; host = match host with | Some v -> v | None -> Unix.gethostname ()}
+  { docker; state_path; state; kv;
+    host = match host with | Some v -> v | None -> Unix.gethostname () }
 
 let docker {docker} = docker
 

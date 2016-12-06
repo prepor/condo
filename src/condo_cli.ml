@@ -53,6 +53,11 @@ let server =
   let doc = "Start HTTP server" in
   Arg.(value & opt (some int) None & info ["server"] ~docv:"PORT" ~doc)
 
+let ui_prefix =
+  let doc = "Path to UI files" in
+  Arg.(value & opt (some string) None & info ["ui"] ~docv:"PATH" ~doc)
+
+
 type t = {
   docker_endpoint : Async_http.addr;
   docker_config : string option;
@@ -61,10 +66,11 @@ type t = {
   expose_state : [`No | `Consul of (Async_http.addr * string)];
   server : int option;
   host : string option;
+  ui_prefix : string option;
 }
 
-let config docker_endpoint docker_config state_path prefixes expose_state server host () =
-  {docker_endpoint; docker_config; state_path; prefixes; expose_state; server; host}
+let config docker_endpoint docker_config state_path prefixes expose_state server host ui_prefix () =
+  {docker_endpoint; docker_config; state_path; prefixes; expose_state; server; host; ui_prefix}
 
 let setup_log =
   let setup style_renderer level =
@@ -76,5 +82,6 @@ let setup_log =
 
 let cmd =
   let doc = "Good daddy for docker containers" in
-  Term.(const config $ docker_endpoint $ docker_config $ state_path $ prefixes $ expose_state $ server $ host $ setup_log),
+  Term.(const config $ docker_endpoint $ docker_config $ state_path $ prefixes $
+        expose_state $ server $ host $ ui_prefix $ setup_log),
   Term.info "condo" ~doc

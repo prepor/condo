@@ -22,6 +22,11 @@ let json_response ?status json =
   let headers = Header.init_with "Content-Type" "application/json" in
   (Response.make ?status ~headers (), body)
 
+let ui_response ui_prefix path =
+  match ui_prefix with
+  | Some prefix -> Server.respond_with_file (Filename.concat prefix path)
+  | None -> return @@ error_response ~status:`Not_found "Path to UI is not configured"
+
 let get_self_state system =
   return @@ json_response (`Assoc (System.get_state system))
 
@@ -42,7 +47,7 @@ let get_global_state system =
 let wait_for' system ~image ~name ~timeout =
   let module Cancel = Cancellable in
   let image_from_container container =
-    let open Yojson.Basic.Util in
+    let open Yojson.Safe.Util in
     container.Condo_instance.spec.Condo_spec.spec
     |> member "Image" |> to_string_option in
   let stable_image_from_snapshot snapshot =
@@ -97,14 +102,19 @@ let wait_for system request =
   | Error err -> return @@ error_response ~status:`Bad_request err
   | Ok v -> v
 
-let handler system ~body addr request =
+let ui_route_prefix = Str.regexp{|/ui/\(.+\)|}
+
+let handler system ui_prefix ~body addr request =
   match Request.uri request |> Uri.path with
   | "/" -> (Response.make (), Body.of_string "Hello world!") |> return
   | "/v1/state" -> get_self_state system
   | "/v1/global_state" -> get_global_state system
   | "/v1/wait_for" -> wait_for system request
+  | "/ui" -> ui_response ui_prefix  "index.html"
+  | path when Str.string_match ui_route_prefix path 0 -> ui_response ui_prefix (Str.matched_group 1 path)
   | _ -> error_response ~status:`Not_found "Not found" |> return
 
-let create system ~port =
-  let%map _ = Server.create ~on_handler_error:(`Call error_handler ) (Tcp.on_port port) (handler system) in
+let create system ~ui_prefix ~port =
+  let%map _ = Server.create ~on_handler_error:(`Call error_handler)
+      (Tcp.on_port port) (handler system ui_prefix) in
   ()

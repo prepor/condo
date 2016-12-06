@@ -73,7 +73,9 @@ module SelfInstance = struct
         return ()
     | Ok spec ->
         let docker = Condo_system.docker system in
-        match%bind Condo_docker.start docker ~name:"condo" ~spec:(inject_hash spec) with
+        match%bind Condo_docker.start docker
+                     ~name:"condo"
+                     ~spec:(inject_hash (spec :> Yojson.Safe.json)) with
         | Error err ->
             Logs.err (fun m -> m "Can't start myself: %s" err);
             Shutdown.shutdown 1;
