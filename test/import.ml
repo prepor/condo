@@ -100,5 +100,5 @@ let write_spec path image =
   let spec = `Assoc [(`Keyword (None, "spec")),
                      `Assoc [(`Keyword (None, "Image"), `String image)];
                      (`Keyword (None, "deploy")),
-                     `Vector [(`Keyword (None, "after")); `Int 1]] in
+                     `Vector [(`Keyword (None, "After")); `Int 1]] in
   Writer.save path (Edn.to_string spec)

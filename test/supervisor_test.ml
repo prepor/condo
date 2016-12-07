@@ -27,13 +27,15 @@ let%expect_test "basic" =
       (spec
        ((deploy (After 1))
         (spec (Assoc ((Image (String prepor/condo-test:good)))))
-        (health_timeout 10) (stop_timeout 10)))))
+        (health_timeout 10) (stop_timeout 10)))
+      (created_at .+) (stable_at ()))) (regexp)
     spec1 --> New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
         (spec (Assoc ((Image (String prepor/condo-test:good)))))
-        (health_timeout 10) (stop_timeout 10)))))
+        (health_timeout 10) (stop_timeout 10)))
+      (created_at .+) (stable_at (.+)))) (regexp)
     New instance from /tmp/condo_specs/spec2.edn with state Init
     Pulling image prepor/condo-test:good
     spec2 --> New state: (Wait
@@ -41,13 +43,15 @@ let%expect_test "basic" =
       (spec
        ((deploy (After 1))
         (spec (Assoc ((Image (String prepor/condo-test:good)))))
-        (health_timeout 10) (stop_timeout 10)))))
+        (health_timeout 10) (stop_timeout 10)))
+      (created_at .+) (stable_at ()))) (regexp)
     spec2 --> New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
         (spec (Assoc ((Image (String prepor/condo-test:good)))))
-        (health_timeout 10) (stop_timeout 10)))))
+        (health_timeout 10) (stop_timeout 10)))
+      (created_at .+) (stable_at (.+)))) (regexp)
     spec1 --> Stop
     spec1 --> New state: Init
     New instance from /tmp/condo_specs/spec1.edn with state Init
@@ -57,13 +61,15 @@ let%expect_test "basic" =
       (spec
        ((deploy (After 1))
         (spec (Assoc ((Image (String prepor/condo-test:good)))))
-        (health_timeout 10) (stop_timeout 10)))))
+        (health_timeout 10) (stop_timeout 10)))
+      (created_at .+) (stable_at ()))) (regexp)
     spec1 --> New state: (Stable
      ((id .+) (regexp)
       (spec
        ((deploy (After 1))
         (spec (Assoc ((Image (String prepor/condo-test:good)))))
-        (health_timeout 10) (stop_timeout 10)))))
+        (health_timeout 10) (stop_timeout 10)))
+      (created_at .+) (stable_at (.+)))) (regexp)
     spec1 --> Stop
     spec1 --> New state: Init
     spec2 --> Stop
