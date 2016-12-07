@@ -1,3 +1,12 @@
+v0.10.2
+--------------------------
+
+BUGXIES:
+  * Attempt to fix memory issue
+  * External json format fixed
+  * Static files http serving & ui-prefix setting
+
+
 v0.10.1
 --------------------------
 
