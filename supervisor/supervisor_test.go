@@ -63,7 +63,7 @@ func TestSupervisor(t *testing.T) {
 	os.Remove(filepath.Join(dir, "spec1.edn"))
 	require.IsType(t, new(instance.Stopped), <-instance1.snapshots)
 
-	go supervisor.Stop()
+	go supervisor.system.Stop()
 
 	require.IsType(t, new(instance.Stopped), <-instance2.snapshots)
 }

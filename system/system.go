@@ -2,6 +2,7 @@ package system
 
 import (
 	"path/filepath"
+	"sync"
 	"time"
 
 	"io/ioutil"
@@ -21,15 +22,27 @@ type Specer interface {
 }
 
 type System struct {
-	Docker *docker.Docker
-	Specs  Specer
+	Docker     *docker.Docker
+	Specs      Specer
+	Components *sync.WaitGroup
+	Done       <-chan struct{}
+	done       chan struct{}
 }
 
 func New(docker *docker.Docker, specs Specer) *System {
+	done := make(chan struct{})
 	return &System{
-		Docker: docker,
-		Specs:  specs,
+		Docker:     docker,
+		Specs:      specs,
+		Components: &sync.WaitGroup{},
+		Done:       done,
+		done:       done,
 	}
+}
+
+func (x *System) Stop() {
+	close(x.done)
+	x.Components.Wait()
 }
 
 type directorySpecs struct {

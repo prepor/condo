@@ -138,6 +138,10 @@ func (x *Spec) AfterTimeout() int64 {
 	return x.Deploy.Strategy.(After).Secs
 }
 
+func (x *Spec) MarshalJSON() ([]byte, error) {
+	return json.Marshal(unspecifyEdn(x.Spec).(map[string]interface{}))
+}
+
 func ednToString(x interface{}) string {
 	switch t := x.(type) {
 	default:

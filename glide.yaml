@@ -16,3 +16,7 @@ import:
 - package: github.com/Sirupsen/logrus
   version: ^0.11.5
 - package: github.com/jawher/mow.cli
+- package: github.com/urfave/negroni
+  version: ^0.2.0
+- package: github.com/meatballhat/negroni-logrus
+- package: github.com/GeertJohan/go.rice

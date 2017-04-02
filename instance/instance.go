@@ -10,29 +10,31 @@ import (
 )
 
 type Instance struct {
-	Name           string
-	Snapshot       Snapshot
-	system         *system.System
-	logger         *logrus.Entry
-	events         chan event
-	eventsLoopDone chan struct{}
-	done           chan struct{}
-	group          *sync.WaitGroup
-	subscribers    map[interface{}]chan<- Snapshot
+	Name             string
+	Snapshot         Snapshot
+	system           *system.System
+	logger           *logrus.Entry
+	events           chan event
+	eventsLoopDone   chan struct{}
+	done             chan struct{}
+	group            *sync.WaitGroup
+	subscribers      map[interface{}]chan<- Snapshot
+	subscribersMutex sync.Mutex
 }
 
 func New(system *system.System, name string) *Instance {
 	logger := log.WithField("instance", name)
 	return &Instance{
-		Name:           name,
-		Snapshot:       &Init{},
-		system:         system,
-		logger:         logger,
-		events:         make(chan event, 1),
-		eventsLoopDone: make(chan struct{}),
-		subscribers:    make(map[interface{}]chan<- Snapshot),
-		done:           make(chan struct{}),
-		group:          &sync.WaitGroup{},
+		Name:             name,
+		Snapshot:         &Init{},
+		system:           system,
+		logger:           logger,
+		events:           make(chan event, 1),
+		eventsLoopDone:   make(chan struct{}),
+		subscribers:      make(map[interface{}]chan<- Snapshot),
+		subscribersMutex: sync.Mutex{},
+		done:             make(chan struct{}),
+		group:            &sync.WaitGroup{},
 	}
 }
 
@@ -74,14 +76,18 @@ func (x *Instance) Start() {
 				if newSnapshot != x.Snapshot {
 					x.Snapshot = newSnapshot
 					x.logger.WithField("state", x.Snapshot).Info("Updated state")
+					x.subscribersMutex.Lock()
 					for _, subscription := range x.subscribers {
 						subscription <- x.Snapshot
 					}
+					x.subscribersMutex.Unlock()
 				}
 			} else {
+				x.subscribersMutex.Lock()
 				for _, subscription := range x.subscribers {
 					close(subscription)
 				}
+				x.subscribersMutex.Unlock()
 				break
 			}
 		}
@@ -97,11 +103,17 @@ func (x *Instance) Stop() {
 }
 
 func (x *Instance) AddSubsriber(k interface{}) <-chan Snapshot {
+	x.subscribersMutex.Lock()
+	defer x.subscribersMutex.Unlock()
+
 	ch := make(chan Snapshot)
 	x.subscribers[k] = ch
 	return ch
 }
 
 func (x *Instance) RemoveSubscriber(k interface{}) {
+	x.subscribersMutex.Lock()
+	defer x.subscribersMutex.Unlock()
+
 	delete(x.subscribers, k)
 }

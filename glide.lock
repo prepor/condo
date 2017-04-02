@@ -1,24 +1,88 @@
-hash: 84b782c2cd35e0810f8d0bd073db77443a5b88b0f0ee67757f0a838c63016b34
-updated: 2017-04-02T15:02:50.776949107+03:00
+hash: 2d3ef4e1c067f6ca3e3b0cc9511747cb0202202247ba8469013d95ee43b6a6fc
+updated: 2017-04-02T18:31:02.448754791+03:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 346938d642f2ec3594ed81d874461961cd0faa76
+  subpackages:
+  - spew
+- name: github.com/docker/distribution
+  version: 0700fa570d7bcc1b3e46ee127c4489fd25f4daa3
+  subpackages:
+  - digestset
+  - reference
 - name: github.com/docker/docker
   version: 092cba3727bb9b4a2f0e922cd6c0f93ea270e363
   subpackages:
+  - api/types
+  - api/types/blkiodev
+  - api/types/container
+  - api/types/events
+  - api/types/filters
+  - api/types/mount
+  - api/types/network
+  - api/types/reference
+  - api/types/registry
+  - api/types/strslice
+  - api/types/swarm
+  - api/types/time
+  - api/types/versions
+  - api/types/volume
   - client
+  - pkg/tlsconfig
+- name: github.com/docker/go-connections
+  version: 990a1a1a70b0da4c4cb70e117971a4f0babfbf1a
+  subpackages:
+  - nat
+  - sockets
+  - tlsconfig
+- name: github.com/docker/go-units
+  version: 0dadbb0345b35ec7ef35e228dabb8de89a65bf52
 - name: github.com/fsouza/go-dockerclient
   version: 87c7e50e0bcf800ed863c3c3b0fbcc67e3029140
+- name: github.com/GeertJohan/go.rice
+  version: 4bbccbfa39e784796e483270451217d3369ecfbe
 - name: github.com/go-edn/edn
   version: 470b0ab438bbcd34ad4b5cab3d1eb1c13d69d6b9
 - name: github.com/jawher/mow.cli
   version: d3ffbc2f98b83e09dc8efd55ecec75eb5fd656ec
+- name: github.com/meatballhat/negroni-logrus
+  version: 7c570a907cfc69cdc004ad506c6f5e234815b936
+- name: github.com/Microsoft/go-winio
+  version: fff283ad5116362ca252298cfc9b95828956d85d
 - name: github.com/mitchellh/mapstructure
   version: 53818660ed4955e899c0bcafa97299a388bd7c8e
+- name: github.com/opencontainers/go-digest
+  version: aa2ec055abd10d26d539eb630a92241b781ce4bc
+- name: github.com/opencontainers/runc
+  version: 653207bc29a6d2d62b5d4f55b596467cb715a128
+  subpackages:
+  - libcontainer/user
+- name: github.com/pkg/errors
+  version: ff09b135c25aae272398c51a07235b90a75aa4f0
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/Sirupsen/logrus
   version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
 - name: github.com/stretchr/testify
   version: 69483b4bd14f5845b5a1e55bca19e954e827f1d0
-testImports: []
+  subpackages:
+  - assert
+  - require
+- name: github.com/urfave/negroni
+  version: fde5e16d32adc7ad637e9cd9ad21d4ebc6192535
+- name: golang.org/x/net
+  version: ffcf1bedda3b04ebb15a168a59800a73d6dc0f4d
+  subpackages:
+  - context
+  - context/ctxhttp
+  - proxy
+- name: golang.org/x/sys
+  version: 9a7256cb28ed514b4e1e5f68959914c4c28a92e0
+  subpackages:
+  - unix
+  - windows
+testImports:
+- name: github.com/pmezard/go-difflib
+  version: d8ed2627bdf02c080bf22230dbb337003b7aba2d
+  subpackages:
+  - difflib

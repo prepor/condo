@@ -21,9 +21,9 @@ rm -rf pkg/*
 
 # Runtime variables
 LDFLAGS="-s -w"
-LDFLAGS="$LDFLAGS -X main.Name=${NAME}"
-LDFLAGS="$LDFLAGS -X main.Version=${VERSION}"
-LDFLAGS="$LDFLAGS -X main.GitCommit=${GIT_COMMIT}${GIT_DIRTY}"
+LDFLAGS="$LDFLAGS -X cli.Name=${NAME}"
+LDFLAGS="$LDFLAGS -X cli.Version=${VERSION}"
+LDFLAGS="$LDFLAGS -X cli.GitCommit=${GIT_COMMIT}${GIT_DIRTY}"
 
 # Build!
 for GOOS in $XC_OS; do
