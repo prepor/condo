@@ -1,5 +1,5 @@
-hash: 2d3ef4e1c067f6ca3e3b0cc9511747cb0202202247ba8469013d95ee43b6a6fc
-updated: 2017-04-02T18:31:02.448754791+03:00
+hash: c2d12aaf5bd0709881eccce3d62b7ed937e1e11a519079a4f6db44a1610773df
+updated: 2017-04-02T21:31:42.876027105+03:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 346938d642f2ec3594ed81d874461961cd0faa76
@@ -43,6 +43,8 @@ imports:
   version: 4bbccbfa39e784796e483270451217d3369ecfbe
 - name: github.com/go-edn/edn
   version: 470b0ab438bbcd34ad4b5cab3d1eb1c13d69d6b9
+- name: github.com/gorilla/websocket
+  version: 3ab3a8b8831546bd18fd182c20687ca853b2bb13
 - name: github.com/jawher/mow.cli
   version: d3ffbc2f98b83e09dc8efd55ecec75eb5fd656ec
 - name: github.com/meatballhat/negroni-logrus
