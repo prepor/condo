@@ -86,8 +86,8 @@ func (x *BothStarted) String() string {
 
 func (x *Instance) scheduleTry() uuid.UUID {
 	tryID := uuid.NewV4()
+	x.group.Add(1)
 	go func() {
-		x.group.Add(1)
 		defer x.group.Done()
 
 		select {
@@ -106,8 +106,8 @@ func (x *Instance) scheduleTry() uuid.UUID {
 
 func (x *Instance) scheduleDeployCompleted(duration time.Duration) uuid.UUID {
 	tryID := uuid.NewV4()
+	x.group.Add(1)
 	go func() {
-		x.group.Add(1)
 		defer x.group.Done()
 
 		select {

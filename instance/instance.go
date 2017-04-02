@@ -40,8 +40,8 @@ func New(system *system.System, name string) *Instance {
 
 func (x *Instance) Start() {
 	newSpecs := x.system.Specs.ReceiveSpecs(x.Name, x.done)
+	x.group.Add(1)
 	go func() {
-		x.group.Add(1)
 		defer x.group.Done()
 
 		var (
@@ -65,29 +65,38 @@ func (x *Instance) Start() {
 	go func() {
 		defer close(x.eventsLoopDone)
 		var (
-			e  event
-			ok bool
+			e event
 		)
 		for {
-			e, ok = <-x.events
-			if ok {
-				x.logger.WithField("event", e).Info("New event")
-				newSnapshot := x.Snapshot.apply(x, e)
-				if newSnapshot != x.Snapshot {
-					x.Snapshot = newSnapshot
-					x.logger.WithField("state", x.Snapshot).Info("Updated state")
-					x.subscribersMutex.Lock()
-					for _, subscription := range x.subscribers {
-						subscription <- x.Snapshot
-					}
-					x.subscribersMutex.Unlock()
+			e = <-x.events
+			x.logger.WithField("event", e).Info("New event")
+			newSnapshot := x.Snapshot.apply(x, e)
+			if newSnapshot != x.Snapshot {
+				x.Snapshot = newSnapshot
+				x.logger.WithField("state", x.Snapshot).Info("Updated state")
+				x.subscribersMutex.Lock()
+				for _, subscription := range x.subscribers {
+					subscription <- x.Snapshot
 				}
-			} else {
+				x.subscribersMutex.Unlock()
+			}
+
+			if _, ok := newSnapshot.(*Stopped); ok {
 				x.subscribersMutex.Lock()
 				for _, subscription := range x.subscribers {
 					close(subscription)
 				}
 				x.subscribersMutex.Unlock()
+				go func() {
+					for {
+						_, ok := <-x.events
+						if !ok {
+							break
+						}
+					}
+				}()
+				x.group.Wait()
+				close(x.events)
 				break
 			}
 		}
@@ -97,8 +106,6 @@ func (x *Instance) Start() {
 func (x *Instance) Stop() {
 	x.events <- eventStop{}
 	close(x.done)
-	x.group.Wait()
-	close(x.events)
 	<-x.eventsLoopDone
 }
 
