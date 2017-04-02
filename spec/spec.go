@@ -167,8 +167,8 @@ func unspecifyEdn(x interface{}) interface{} {
 		return m
 	case []interface{}:
 		xs := make([]interface{}, len(t))
-		for _, v := range t {
-			xs = append(xs, unspecifyEdn(v))
+		for i, v := range t {
+			xs[i] = unspecifyEdn(v)
 		}
 		return xs
 	case edn.Keyword:

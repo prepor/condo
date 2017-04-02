@@ -1,4 +1,4 @@
-condo
+condo [![Build Status](https://travis-ci.org/prepor/condo.svg?branch=next)](https://travis-ci.org/prepor/condo)
 -------------------------------------------------------------------------------
 ![Condo](http://c1.staticflickr.com/5/4040/5141512500_613bde41aa_z.jpg)
 

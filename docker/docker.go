@@ -9,10 +9,12 @@ import (
 
 	"time"
 
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/davecgh/go-spew/spew"
 	dockerTypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/prepor/condo/spec"
@@ -69,7 +71,7 @@ func (d Docker) getCredentials(image string) (res string) {
 			if err != nil {
 				panic(fmt.Sprintf("Can't marshal auth config: %#v", err))
 			}
-			res = string(resBytes)
+			res = base64.StdEncoding.EncodeToString(resBytes)
 			return
 		}
 	}
@@ -79,20 +81,20 @@ func (d Docker) getCredentials(image string) (res string) {
 func (d *Docker) Start(l *logrus.Entry, name string, spec *spec.Spec) (container *Container, err error) {
 	l.Info("Start container")
 	config, hostConfig, networkingConfig, err := spec.ContainerConfigs()
-	l.WithFields(logrus.Fields{"config": config,
-		"hostConfig":       hostConfig,
-		"networkingConfig": networkingConfig,
-	}).Debug("Container config")
+	l.Debug("Container config:", spew.Sdump(config, hostConfig, networkingConfig))
 	if err != nil {
 		return
 	}
 
 	ctx := context.Background()
 
-	l.WithField("image", config.Image).Info("Image pull")
+	credentials := d.getCredentials(config.Image)
+	l.WithField("image", config.Image).
+		WithField("credentials", credentials).
+		Info("Image pull")
 	r, err := d.client.ImagePull(ctx, config.Image,
 		dockerTypes.ImagePullOptions{
-			RegistryAuth: d.getCredentials(config.Image),
+			RegistryAuth: credentials,
 		})
 	if err != nil {
 		return

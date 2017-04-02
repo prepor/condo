@@ -11,8 +11,9 @@ import (
 
 func TestParsing(t *testing.T) {
 	s := `{:deploy [:After 10]
-           :spec {:Image "nginx"
-                  :HostConfig {:NetworkMode "host"}}
+               :spec {:Image "nginx"
+                      :HostConfig {:NetworkMode "host"}
+                      :Env ["HOST=localhost"]}
 	       :stop-timeout 5}`
 	spec, err := Parse([]byte(s))
 	if err != nil {
@@ -26,6 +27,9 @@ func TestParsing(t *testing.T) {
 				edn.Keyword("HostConfig"): map[interface{}]interface{}{
 					edn.Keyword("NetworkMode"): "host",
 				},
+				edn.Keyword("Env"): []interface{}{
+					"HOST=localhost",
+				},
 			},
 			HealthTimeout: 10,
 			StopTimeout:   5},
@@ -34,7 +38,11 @@ func TestParsing(t *testing.T) {
 	config, hostConfig, networkingConfig, err := spec.ContainerConfigs()
 
 	assert.Equal(t, err, nil)
-	assert.Equal(t, &container.Config{Image: "nginx"}, config)
+	assert.Equal(t, &container.Config{
+		Image: "nginx",
+		Env:   []string{"HOST=localhost"},
+	},
+		config)
 	assert.Equal(t, &container.HostConfig{NetworkMode: "host"}, hostConfig)
 	assert.Equal(t, &network.NetworkingConfig{}, networkingConfig)
 

@@ -55,13 +55,25 @@ func main() {
 	auths := dockerAuths{}
 	app.VarOpt("docker-auth", &auths, "Docker registry host:login:password")
 
-	app.Spec = "[--docker-auth]..."
+	verbose := app.Bool(cli.BoolOpt{
+		Name:  "verbose",
+		Value: false,
+		Desc:  "Enable debug logs",
+	})
+
+	app.Spec = "[--docker-auth]... [--verbose]"
+
+	app.Before = func() {
+		if *verbose {
+			log.SetLevel(log.DebugLevel)
+		}
+	}
 
 	app.Command("execute", "Start docker container from provided EDN spec", func(cmd *cli.Cmd) {
 		specPath := cmd.StringArg("PATH", "", "")
 		cmd.Action = func() {
 			content, err := ioutil.ReadFile(*specPath)
-			logger := log.WithField("path", specPath)
+			logger := log.WithField("path", *specPath)
 			if err != nil {
 				logger.WithError(err).Fatal("Can't read")
 			}
