@@ -61,16 +61,21 @@ func main() {
 		specPath := cmd.StringArg("PATH", "", "")
 		cmd.Action = func() {
 			content, err := ioutil.ReadFile(*specPath)
+			logger := log.WithField("path", specPath)
 			if err != nil {
-				log.WithField("path", specPath).WithError(err).Fatal("Can't read")
+				logger.WithError(err).Fatal("Can't read")
 			}
 			s, err := spec.Parse(content)
 			if err != nil {
-				log.WithField("path", specPath).WithError(err).Fatal("Can't parse")
+				logger.WithError(err).Fatal("Can't parse")
 			}
 			docker := docker.New(auths)
 			name := filepath.Base(*specPath)
-			docker.Start(log.NewEntry(log.StandardLogger()), name[0:len(name)-len(filepath.Ext(name))], s)
+			container, err := docker.Start(log.NewEntry(log.StandardLogger()), name[0:len(name)-len(filepath.Ext(name))], s)
+			if err != nil {
+				logger.WithError(err).Fatal("Can't start container")
+			}
+			logger.WithField("id", container.Id).Info("Container started")
 		}
 	})
 
