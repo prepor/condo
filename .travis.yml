@@ -10,5 +10,6 @@ go:
 
 env:
   - GOMAXPROCS=4
+  - DOCKER_API_VERSION=1.24
 
 script: make deps test
