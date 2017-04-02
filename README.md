@@ -10,26 +10,20 @@ Condo is a simple idempotent supervisor for Docker containers. It can be used as
 * Reacts to any changes in these directories and specifications therein (adding, removing and updating of specifications).
 * Zero downtime deployments with `:After` option enabled. It starts a new container *in parallel* with the old one, and stops the old one only after the new one is successfully started (including health checks).
 * Supports the health check feature of Docker (from `1.12`). It considers a container `Stable` only when the health checks are passed.
-* Manages its own persistent state. You can `kill -9` condo and start it again, everything will be fine.
-* Exposes its state into an external storage (e.g. [Consul](https://www.consul.io/)). It can be used for monitoring of the entire system, higher level orchestration, etc.
-* Understands Docker authentification config file (usually `~/.docker/config.json`).
-* Provides http-endpoint to track the deployment status of a service (`/v1/wait_for`).
-* Nice UI for exploring the state of current daemon and the entire system (if state exposing is enabled). TODO: it's broken now
 * Container specification is fully opaque for condo, it has the same format as [Docker's remote API](https://docs.docker.com/engine/reference/api/docker_remote_api_v1.24/#create-a-container), so there is no additional point of indirection and you can use all of Docker's features (even unreleased).
-* Self-bootstrapping and updating. It can even deploy itself!
 
 ## Quickstart
 
 Condo is compiled into native code, but the primary distribution method is Docker, of course.
 
-Note: you can always see help by executing `docker run prepor/condo:v0.10.1 --help`
+Note: you can always see help by executing `docker run prepor/condo:0.11.dev --help`
 
 Condo uses [edn](https://github.com/edn-format/edn) format to describe specifications. It's a human and machine readable format, with comments, and it's extendable.
 
 Let's start nginx with condo:
 
-    mkdir -p /tmp/condo_specs && echo '{:spec {:Image "nginx:1.11.4-alpine"}}' > /tmp/condo_specs/nginx.edn
-    docker run -v /tmp/condo_specs:/var/lib/condo -v /var/run/docker.sock:/var/run/docker.sock -ti prepor/condo:v0.10.1
+    mkdir -p /tmp/condo_specs && echo '{:spec {:Image "nginx:1.11.4-alpine"} :deploy [:After 5]}' > /tmp/condo_specs/nginx.edn
+    docker run -v /tmp/condo_specs:/var/lib/condo -v /var/run/docker.sock:/var/run/docker.sock -ti prepor/condo:0.11.dev
 
 You will see `Wait` -> `Stable` log messages. It means that our container has successfully started.
 
@@ -37,7 +31,7 @@ Now we will try to deploy a new version of this image:
 
     echo '{:spec {:Image "nginx:oops-alpine"} :deploy [:After 5]}' > /tmp/condo_specs/nginx.edn
     
-Oops, there is a typo and we have an error: `Tag oops-alpine not found in repository`. The current state now is `TryAgainNext`. Condo will try to deploy this spec until it is successful or until a new specification arrives. Note that we still have `nginx:1.11.4-alpine` running – that's because we've specified the `:deploy [:After 5]` option, and the new container tries to start in parallel with the previous one.
+Oops, there is a typo and we have an error: `manifest for nginx:oops-alpine not found`. The current state now is `TryAgainNext`. Condo will try to deploy this spec until it is successful or until a new specification arrives. Note that we still have `nginx:1.11.4-alpine` running – that's because we've specified the `:deploy [:After 5]` option, and the new container tries to start in parallel with the previous one.
 
 Let's fix the typo:
 
@@ -61,18 +55,6 @@ Optional parameters:
 * `:health-timeout` in seconds (default 10). It describes how long condo will wait for the health checks to pass.
 * `:stop-timeout` in seconds (default 10). It will be passed into `stop` Docker operation. It describes how long it will wait before force-stopping the container.
   
-## HTTP API
-
-See [How it works](https://github.com/prepor/condo#how-it-works) for definition of state.
-
-* `/v1/state` – current state of all instances as json.
-* `/v1/global_state` – current state of all condo instances (if state exposing into external storage is configured).
-* `/v1/wait_for` – wait for the stable state of a service in all condo instances.
-  Query params: 
-  * `name` – the name of the service;
-  * `timeout` – how long to wait in seconds. Returns 500 after `timeout`;
-  * `image` – which image we are waiting for.
-
 ## Real world setups
 
 There are some examples of combining condo with other tools. It proceeds
@@ -143,20 +125,6 @@ Docker Registrator registers containers as service in different service discover
          
 It will register nginx-service which starts at a random port in Consul. Now this information can be used by some external load balancer.
  
-## Self-deploying
-
-Condo supports special specification file -- `self.edn`. After it is updated, condo suspends all other updates and starts a new container with this specification, and after that gracefully stops itself.
-
-Be careful, the format of this specification is different, because it contains only Docker container specification (which usually resides inside `:spec` keyword).
-
-Example: 
-
-    echo '{:Image "prepor/condo:v0.10.1"
-           :HostConfig {:Binds ["/var/run/docker.sock:/var/run/docker.sock"
-                                "/tmp/condo_specs:/var/lib/condo"]}}
-         ' > /tmp/condo_specs/self.edn
-
-
 ## Best practices
 
 * Define health checks. Without them, condo considers a container successfully started even if it crashed in a second.
@@ -168,36 +136,12 @@ One of the main reasons why condo exists is because a deployment tool should be 
 
 ![Fsm](doc/fsm.png)
 
-And its state can be (and is) described as:
-
-```ocaml
-type container = {
-  id : string;
-  spec : Spec.t; (* spec as it was provided *)
-  created_at : float; (* unix timestamp *)
-  stable_at : float option; (* unix timestamp *)
-}
-
-type snapshot = | Init
-                | Wait of container
-                | TryAgain of (Spec.t * float)
-                | Stable of container
-                | WaitNext of (container * container)
-                | TryAgainNext of (container * Spec.t * float)
-```
-
-This state can be requested via HTTP API and used to build tools on top of condo.
-
 ## Build
 
-You will need OCaml 4.02.3.
+You will need go and glide
 
-    git clone https://github.com/prepor/condo.git
-    cd condo
-    opam pin add -ny condo .
-    opam install -y --deps-only condo
-    opam install -y topkg-care
-    topkg build
+    glide i
+    go run main.go
 
 ## Credits
 
