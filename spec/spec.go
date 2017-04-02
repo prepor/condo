@@ -141,11 +141,17 @@ func (x *Spec) AfterTimeout() int64 {
 func ednToString(x interface{}) string {
 	switch t := x.(type) {
 	default:
-		v, err := json.Marshal(t)
+		t2, ok := t.(string)
+		if ok {
+			return t2
+		}
+		t3, err := json.Marshal(t)
 		if err != nil {
 			panic(fmt.Sprintf("Can't marshal EDN to string: %#v", err))
 		}
-		return string(v)
+		return string(t3)
+	case string:
+		return t
 	case edn.Keyword:
 		return string(t)
 	case edn.Symbol:
