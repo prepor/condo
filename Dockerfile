@@ -1,6 +1,6 @@
 FROM gliderlabs/alpine:3.4
 
-ADD ./pkg/linux_amd64/condo /usr/bin/condo
+ADD pkg/condo_linux_amd64 /usr/bin/condo
 
 VOLUME ["/var/lib/condo"]
 

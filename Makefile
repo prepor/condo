@@ -18,8 +18,8 @@ ME_ARCH = $(shell go env GOARCH)
 
 # Default os-arch combination to build
 XC_OS ?= darwin freebsd linux windows
-XC_ARCH ?= 386 amd64 
-XC_EXCLUDE ?= 
+XC_ARCH ?= 386 amd64
+XC_EXCLUDE ?=
 
 # GPG Signing key (blank by default, means no GPG signing)
 GPG_KEY ?=
@@ -120,7 +120,7 @@ docker:
 	@docker build \
 		--pull \
 		--rm \
-		--file="docker/Dockerfile" \
+		--file="Dockerfile" \
 		--tag="${OWNER}/${NAME}" \
 		--tag="${OWNER}/${NAME}:${VERSION}" \
 		"${CURRENT_DIR}"
@@ -145,5 +145,6 @@ release:
 	@docker push "${OWNER}/${NAME}:latest"
 	@docker push "${OWNER}/${NAME}:${VERSION}"
 	@echo "==> Making github release..."
+	@ghr "${VERSION}" pkg/
 
 .PHONY: bin bin-local bootstrap deps dev dist docker docker-push generate test test-race release

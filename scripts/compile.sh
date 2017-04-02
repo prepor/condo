@@ -50,7 +50,7 @@ for GOOS in $XC_OS; do
       go build \
       -a \
       -ldflags="$LDFLAGS" \
-      -o="pkg/${GOOS}_${GOARCH}/${NAME}${EXT}" \
+      -o="pkg/${NAME}_${GOOS}_${GOARCH}${EXT}" \
       .
   done
 done
