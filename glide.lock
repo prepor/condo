@@ -1,0 +1,24 @@
+hash: 84b782c2cd35e0810f8d0bd073db77443a5b88b0f0ee67757f0a838c63016b34
+updated: 2017-04-01T18:17:44.803316669+03:00
+imports:
+- name: github.com/davecgh/go-spew
+  version: 346938d642f2ec3594ed81d874461961cd0faa76
+- name: github.com/docker/docker
+  version: 092cba3727bb9b4a2f0e922cd6c0f93ea270e363
+  subpackages:
+  - client
+- name: github.com/fsouza/go-dockerclient
+  version: 87c7e50e0bcf800ed863c3c3b0fbcc67e3029140
+- name: github.com/go-edn/edn
+  version: 470b0ab438bbcd34ad4b5cab3d1eb1c13d69d6b9
+- name: github.com/jawher/mow.cli
+  version: d3ffbc2f98b83e09dc8efd55ecec75eb5fd656ec
+- name: github.com/mitchellh/mapstructure
+  version: 53818660ed4955e899c0bcafa97299a388bd7c8e
+- name: github.com/satori/go.uuid
+  version: 879c5887cd475cd7864858769793b2ceb0d44feb
+- name: github.com/Sirupsen/logrus
+  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
+- name: github.com/stretchr/testify
+  version: 69483b4bd14f5845b5a1e55bca19e954e827f1d0
+testImports: []

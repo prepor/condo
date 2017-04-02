@@ -1,7 +1,0 @@
-{
-	  "auths": {
-		    "docker.infra.aidbox.io": {
-			      "auth": "YWlkYm94OmhlbGxv"
-		    }
-	  }
-}

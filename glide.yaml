@@ -1,0 +1,18 @@
+package: github.com/prepor/condo
+import:
+- package: github.com/fsouza/go-dockerclient
+- package: github.com/go-edn/edn
+- package: github.com/stretchr/testify
+  version: ^1.1.4
+- package: github.com/davecgh/go-spew
+  version: ^1.1.0
+- package: github.com/docker/docker
+  version: ^1.13.1
+  subpackages:
+  - client
+- package: github.com/mitchellh/mapstructure
+- package: github.com/satori/go.uuid
+  version: ^1.1.0
+- package: github.com/Sirupsen/logrus
+  version: ^0.11.5
+- package: github.com/jawher/mow.cli

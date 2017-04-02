@@ -1,8 +1,5 @@
-_build
-tmp
-*~
-\.\#*
-\#*#
-*.install
-*.native
-*.byte
+vendor
+.idea
+.DS_Store
+.vscode
+/pkg

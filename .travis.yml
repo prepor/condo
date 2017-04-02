@@ -1,0 +1,14 @@
+sudo: required
+
+services:
+  - docker
+
+language: go
+
+go:
+  - 1.8
+
+env:
+  - GOMAXPROCS=4
+
+script: make deps test
