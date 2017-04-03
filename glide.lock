@@ -1,5 +1,5 @@
-hash: c2d12aaf5bd0709881eccce3d62b7ed937e1e11a519079a4f6db44a1610773df
-updated: 2017-04-02T21:31:42.876027105+03:00
+hash: f1f7299d097b8b7baa2fcbecb3a71b3ca19b55e5426d62882040896997879e07
+updated: 2017-04-02T23:49:26.176579859+03:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 346938d642f2ec3594ed81d874461961cd0faa76
@@ -47,12 +47,18 @@ imports:
   version: 3ab3a8b8831546bd18fd182c20687ca853b2bb13
 - name: github.com/jawher/mow.cli
   version: d3ffbc2f98b83e09dc8efd55ecec75eb5fd656ec
+- name: github.com/jroimartin/gocui
+  version: 612b0b2987ec1a6af46d7008cef1efd4b3898346
+- name: github.com/mattn/go-runewidth
+  version: 14207d285c6c197daabb5c9793d63e7af9ab2d50
 - name: github.com/meatballhat/negroni-logrus
   version: 7c570a907cfc69cdc004ad506c6f5e234815b936
 - name: github.com/Microsoft/go-winio
   version: fff283ad5116362ca252298cfc9b95828956d85d
 - name: github.com/mitchellh/mapstructure
   version: 53818660ed4955e899c0bcafa97299a388bd7c8e
+- name: github.com/nsf/termbox-go
+  version: 7994c181db7761ca3c67a217068cf31826113f5f
 - name: github.com/opencontainers/go-digest
   version: aa2ec055abd10d26d539eb630a92241b781ce4bc
 - name: github.com/opencontainers/runc

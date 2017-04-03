@@ -18,6 +18,7 @@ import (
 	"github.com/prepor/condo/spec"
 	"github.com/prepor/condo/supervisor"
 	"github.com/prepor/condo/system"
+	"github.com/prepor/condo/top"
 )
 
 type dockerAuths []docker.Auth
@@ -91,7 +92,7 @@ func Go() {
 
 	app.Command("start", "Start condo daemon with specs provider", func(cmd *cli.Cmd) {
 		directory := cmd.StringOpt("directory", "", "Path to directory with condo's specs")
-		listen := cmd.StringOpt("listen", "", "Provides HTTP API and dashboard")
+		listen := cmd.StringOpt("listen", ":4765", "Provides HTTP API and dashboard")
 		cmd.Spec = "--directory=<path> [--listen=<addr>]"
 		cmd.Action = func() {
 			sigs := make(chan os.Signal, 1)
@@ -117,6 +118,14 @@ func Go() {
 			<-sigs
 			system.Stop()
 
+		}
+	})
+
+	app.Command("top", "Show condo's status", func(cmd *cli.Cmd) {
+		connect := cmd.StringOpt("connect", "ws://localhost:4765/v1/state-stream", "Condo daemon address")
+		cmd.Spec = "[--connect=<addr>]"
+		cmd.Action = func() {
+			top.Go(*connect)
 		}
 	})
 
