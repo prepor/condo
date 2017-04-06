@@ -4,23 +4,25 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
+	"github.com/Jeffail/gabs"
 	log "github.com/Sirupsen/logrus"
-	"github.com/go-edn/edn"
+	"github.com/gorilla/websocket"
 	"github.com/jroimartin/gocui"
-	"github.com/prepor/condo/docker"
-	"github.com/prepor/condo/instance"
-	"github.com/prepor/condo/spec"
 )
 
 var (
 	selectedService string
-	cursor          int = -1
-	states          map[string]instance.Snapshot
+	cursor          = -1
+	states          map[string]*gabs.Container
 	lock            sync.Mutex
 )
 
 func cursorDown(g *gocui.Gui, v *gocui.View) error {
+	lock.Lock()
+	defer lock.Unlock()
+
 	if cursor < len(states)-1 {
 		cursor++
 	}
@@ -52,6 +54,9 @@ func cancelSelected(g *gocui.Gui, v *gocui.View) error {
 }
 
 func cursorUp(g *gocui.Gui, v *gocui.View) error {
+	lock.Lock()
+	defer lock.Unlock()
+
 	if cursor != 0 {
 		cursor--
 	}
@@ -86,7 +91,7 @@ func selectedLayout(g *gocui.Gui) {
 	v.Title = selectedService
 	v.Clear()
 
-	fmt.Fprintf(v, s.String())
+	CliDetails(v, s)
 
 	v, err = g.SetView("menu", 0, maxY-3, maxX-1, maxY-1)
 	if err != nil && err != gocui.ErrUnknownView {
@@ -113,16 +118,16 @@ func listLayout(g *gocui.Gui) {
 		s := states[service]
 		if i == cursor {
 			fmt.Fprintf(v, "\033[38;4m%s\033[0m", service)
-			for i = 0; i < 20-len(service); i += 1 {
+			for i = 0; i < 20-len(service); i++ {
 				fmt.Fprint(v, " ")
 			}
 
 		} else {
 			fmt.Fprintf(v, "%-20s", service)
 		}
-		s.CliStatus(v)
+		CliStatus(v, s)
 		fmt.Fprint(v, "\n")
-		i += 1
+		i++
 	}
 
 	v, err = g.SetView("menu", 0, maxY-3, maxX-1, maxY-1)
@@ -148,103 +153,112 @@ func layout(g *gocui.Gui) error {
 func Go(address string) {
 	g, err := gocui.NewGui(gocui.Output256)
 
-	// states = make(map[string]instance.Snapshot)
+	states = make(map[string]*gabs.Container)
 
-	states = map[string]instance.Snapshot{
-		"nginx": &instance.Init{},
-		"postgres": &instance.Wait{
-			Container: &docker.Container{
-				Id: "9e3250d03a54f3355f0563998b73bd396756cac6dd590e397aa3bfd25f97d850",
-				Spec: &spec.Spec{
-					Spec: map[interface{}]interface{}{
-						edn.Keyword("Image"): "nginx:postgres",
-					},
-				},
-			},
-		},
-		"nginx2": &instance.Stable{
-			Container: &docker.Container{
-				Id: "9e3250d03a54f3355f0563998b73bd396756cac6dd590e397aa3bfd25f97d850",
-				Spec: &spec.Spec{
-					Spec: map[interface{}]interface{}{
-						edn.Keyword("Image"): "nginx:2",
-					},
-				},
-			},
-		},
-		"nginx3": &instance.TryAgain{
-			Spec: &spec.Spec{
-				Spec: map[interface{}]interface{}{
-					edn.Keyword("Image"): "nginx:3",
-				},
-			},
-		},
-		"narus": &instance.BothStarted{
-			Prev: &docker.Container{
-				Id: "9e3250d03a54f3355f0563998b73bd396756cac6dd590e397aa3bfd25f97d850",
-				Spec: &spec.Spec{
-					Spec: map[interface{}]interface{}{
-						edn.Keyword("Image"): "narus:1",
-					},
-				},
-			},
-			Next: &docker.Container{
-				Id: "9e3250d03a54f3355f0563998b73bd396756cac6dd590e397aa3bfd25f97d850",
-				Spec: &spec.Spec{
-					Spec: map[interface{}]interface{}{
-						edn.Keyword("Image"): "narus:2",
-					},
-				},
-			},
-		},
-	}
+	// now := time.Now()
+
+	// states = map[string]instance.Snapshot{
+	// 	"nginx": &instance.Init{},
+	// 	"postgres": &instance.Wait{
+	// 		Container: &docker.Container{
+	// 			Id:        "9e3250d03a54f3355f0563998b73bd396756cac6dd590e397aa3bfd25f97d850",
+	// 			StartedAt: &now,
+	// 			Spec: &spec.Spec{
+	// 				Spec: map[interface{}]interface{}{
+	// 					edn.Keyword("Image"): "nginx:postgres",
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// 	"nginx2": &instance.Stable{
+	// 		Container: &docker.Container{
+	// 			Id:        "9e3250d03a54f3355f0563998b73bd396756cac6dd590e397aa3bfd25f97d850",
+	// 			StartedAt: &now,
+	// 			Spec: &spec.Spec{
+	// 				Spec: map[interface{}]interface{}{
+	// 					edn.Keyword("Image"): "nginx:2",
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// 	"nginx3": &instance.TryAgain{
+	// 		Spec: &spec.Spec{
+	// 			Spec: map[interface{}]interface{}{
+	// 				edn.Keyword("Image"): "nginx:3",
+	// 			},
+	// 		},
+	// 	},
+	// 	"narus": &instance.BothStarted{
+	// 		Prev: &docker.Container{
+	// 			Id:        "9e3250d03a54f3355f0563998b73bd396756cac6dd590e397aa3bfd25f97d850",
+	// 			StartedAt: &now,
+	// 			Spec: &spec.Spec{
+	// 				Spec: map[interface{}]interface{}{
+	// 					edn.Keyword("Image"): "narus:1",
+	// 				},
+	// 			},
+	// 		},
+	// 		Next: &docker.Container{
+	// 			Id:        "9e3250d03a54f3355f0563998b73bd396756cac6dd590e397aa3bfd25f97d850",
+	// 			StartedAt: &now,
+	// 			Spec: &spec.Spec{
+	// 				Spec: map[interface{}]interface{}{
+	// 					edn.Keyword("Image"): "narus:2",
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// }
 
 	if err != nil {
 		log.Panicln(err)
 	}
 	defer g.Close()
 
-	// c, _, err := websocket.DefaultDialer.Dial(address, nil)
-	// if err != nil {
-	// 	log.WithError(err).Fatal("Can't connect to", address)
-	// }
-	// defer c.Close()
+	c, _, err := websocket.DefaultDialer.Dial(address, nil)
+	if err != nil {
+		log.WithError(err).Fatal("Can't connect to", address)
+	}
+	defer c.Close()
 
-	// layout := func(g *gocui.Gui) error {
-	// 	lock.Lock()
-	// 	defer lock.Unlock()
-	// 	maxX, maxY := g.Size()
+	go func() {
+		for {
+			var message interface{}
+			err := c.ReadJSON(&message)
+			if err != nil {
+				log.WithError(err).Fatal("Can't parse JSON message")
+			}
+			lock.Lock()
+			// spew.Config.DisableMethods = true
 
-	// 	v, err := g.SetView("list", 0, 0, maxX, maxY)
-	// 	if err != nil && err != gocui.ErrUnknownView {
-	// 		return err
-	// 	}
-	// 	v.Clear()
-	// 	for n, s := range states {
-	// 		fmt.Fprintf(v, "%s (%s)\n", n, s.String())
-	// 	}
-	// 	return nil
-	// }
-
-	// go func() {
-	// 	for {
-	// 		var message api.StreamAnswer
-	// 		err := c.ReadJSON(&message)
-	// 		if err != nil {
-	// 			log.WithError(err).Fatal("Can't parse JSON message")
-	// 		}
-	// 		lock.Lock()
-	// 		if _, ok := message.Snapshot.(*instance.Stopped); ok {
-	// 			delete(states, message.Name)
-	// 		} else {
-	// 			states[message.Name] = message.Snapshot
-	// 		}
-	// 		lock.Unlock()
-	// 		g.Execute(layout)
-	// 	}
-	// }()
+			// spew.Dump(message)
+			c, err := gabs.Consume(message)
+			if err != nil {
+				log.Fatal(err)
+			}
+			name := c.Path("Name").Data().(string)
+			if c.Path("Snapshot.State").Data().(string) == "Stopped" {
+				delete(states, name)
+			} else {
+				states[name] = c.Path("Snapshot")
+			}
+			lock.Unlock()
+			g.Execute(layout)
+		}
+	}()
 
 	g.SetManagerFunc(layout)
+
+	go func() {
+		for {
+			time.Sleep(time.Second)
+			lock.Lock()
+			if selectedService != "" {
+				g.Execute(layout)
+			}
+			lock.Unlock()
+		}
+	}()
 
 	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
 		log.Panicln(err)

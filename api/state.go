@@ -1,8 +1,6 @@
 package api
 
 import (
-	"encoding/json"
-
 	"github.com/prepor/condo/instance"
 	"github.com/prepor/condo/supervisor"
 )
@@ -111,59 +109,6 @@ func (x *stateManager) readCurrent() map[string]instance.Snapshot {
 type StreamAnswer struct {
 	Name     string
 	Snapshot instance.Snapshot
-}
-
-func (x *StreamAnswer) UnmarshalJSON(bytes []byte) error {
-	var data map[string]json.RawMessage
-	if err := json.Unmarshal(bytes, &data); err != nil {
-		return err
-	}
-	if err := json.Unmarshal(data["Name"], &x.Name); err != nil {
-		return err
-	}
-	var s map[string]json.RawMessage
-	if err := json.Unmarshal(data["Snapshot"], &s); err != nil {
-		return err
-	}
-	var state string
-	if err := json.Unmarshal(s["State"], &state); err != nil {
-		return err
-	}
-	switch state {
-	case "Init":
-		var res instance.Init
-		json.Unmarshal(data["Snapshot"], &res)
-		x.Snapshot = &res
-	case "Stable":
-		var res instance.Stable
-		json.Unmarshal(data["Snapshot"], &res)
-		x.Snapshot = &res
-	case "Wait":
-		var res instance.Wait
-		json.Unmarshal(data["Snapshot"], &res)
-		x.Snapshot = &res
-	case "TryAgain":
-		var res instance.TryAgain
-		json.Unmarshal(data["Snapshot"], &res)
-		x.Snapshot = &res
-	case "TryAgainNext":
-		var res instance.TryAgainNext
-		json.Unmarshal(data["Snapshot"], &res)
-		x.Snapshot = &res
-	case "WaitNext":
-		var res instance.WaitNext
-		json.Unmarshal(data["Snapshot"], &res)
-		x.Snapshot = &res
-	case "Stopped":
-		var res instance.Stopped
-		json.Unmarshal(data["Snapshot"], &res)
-		x.Snapshot = &res
-	case "BothStarted":
-		var res instance.BothStarted
-		json.Unmarshal(data["Snapshot"], &res)
-		x.Snapshot = &res
-	}
-	return nil
 }
 
 func (x *stateManager) readStream(done <-chan struct{}) <-chan *StreamAnswer {

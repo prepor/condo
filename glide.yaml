@@ -24,3 +24,6 @@ import:
   version: ^1.1.0
 - package: github.com/jroimartin/gocui
   version: 612b0b2987ec1a6af46d7008cef1efd4b3898346
+- package: github.com/Jeffail/gabs
+  version: ^1.0.0
+- package: github.com/nwidger/jsoncolor

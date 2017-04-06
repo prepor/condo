@@ -1,5 +1,5 @@
-hash: f1f7299d097b8b7baa2fcbecb3a71b3ca19b55e5426d62882040896997879e07
-updated: 2017-04-02T23:49:26.176579859+03:00
+hash: e09a0858df38d8cf71f4d06131da5baa94e5e00727916ba9af6996359bc9b8b0
+updated: 2017-04-06T19:29:36.324951832+03:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 346938d642f2ec3594ed81d874461961cd0faa76
@@ -47,6 +47,8 @@ imports:
   version: 3ab3a8b8831546bd18fd182c20687ca853b2bb13
 - name: github.com/jawher/mow.cli
   version: d3ffbc2f98b83e09dc8efd55ecec75eb5fd656ec
+- name: github.com/Jeffail/gabs
+  version: 2a3aa15961d5fee6047b8151b67ac2f08ba2c48c
 - name: github.com/jroimartin/gocui
   version: 612b0b2987ec1a6af46d7008cef1efd4b3898346
 - name: github.com/mattn/go-runewidth
@@ -59,10 +61,12 @@ imports:
   version: 53818660ed4955e899c0bcafa97299a388bd7c8e
 - name: github.com/nsf/termbox-go
   version: 7994c181db7761ca3c67a217068cf31826113f5f
+- name: github.com/nwidger/jsoncolor
+  version: 75a6de4340e59be95f0884b9cebdda246e0fdf40
 - name: github.com/opencontainers/go-digest
   version: aa2ec055abd10d26d539eb630a92241b781ce4bc
 - name: github.com/opencontainers/runc
-  version: 653207bc29a6d2d62b5d4f55b596467cb715a128
+  version: f990e58f26ab48367284f4a4e21bb95d641cde19
   subpackages:
   - libcontainer/user
 - name: github.com/pkg/errors

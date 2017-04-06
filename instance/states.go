@@ -3,7 +3,6 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/prepor/condo/docker"
@@ -15,7 +14,6 @@ type Snapshot interface {
 	fmt.Stringer
 	json.Marshaler
 	apply(instance *Instance, e event) Snapshot
-	CliStatus(w io.Writer)
 }
 
 type Init struct {
@@ -149,13 +147,6 @@ func (s *Init) apply(instance *Instance, e event) Snapshot {
 	}
 }
 
-func (x *Init) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		State string
-		Init
-	}{"Init", *x})
-}
-
 func (s *Wait) apply(instance *Instance, e event) Snapshot {
 	switch e := e.(type) {
 	default:
@@ -181,13 +172,6 @@ func (s *Wait) apply(instance *Instance, e event) Snapshot {
 	}
 }
 
-func (x *Wait) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		State string
-		Wait
-	}{"Wait", *x})
-}
-
 func (s *TryAgain) apply(instance *Instance, e event) Snapshot {
 	switch e := e.(type) {
 	default:
@@ -205,13 +189,6 @@ func (s *TryAgain) apply(instance *Instance, e event) Snapshot {
 	}
 }
 
-func (x *TryAgain) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		State string
-		TryAgain
-	}{"TryAgain", *x})
-}
-
 func (s *Stable) apply(instance *Instance, e event) Snapshot {
 	switch e := e.(type) {
 	default:
@@ -227,13 +204,6 @@ func (s *Stable) apply(instance *Instance, e event) Snapshot {
 		s.Container.Stop()
 		return &Stopped{}
 	}
-}
-
-func (x *Stable) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		State string
-		Stable
-	}{"Stable", *x})
 }
 
 func (s *WaitNext) apply(instance *Instance, e event) Snapshot {
@@ -271,13 +241,6 @@ func (s *WaitNext) apply(instance *Instance, e event) Snapshot {
 	}
 }
 
-func (x *WaitNext) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		State string
-		WaitNext
-	}{"WaitNext", *x})
-}
-
 func (s *TryAgainNext) apply(instance *Instance, e event) Snapshot {
 	switch e := e.(type) {
 	default:
@@ -294,13 +257,6 @@ func (s *TryAgainNext) apply(instance *Instance, e event) Snapshot {
 		s.Current.Stop()
 		return &Stopped{}
 	}
-}
-
-func (x *TryAgainNext) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		State string
-		TryAgainNext
-	}{"TryAgainNext", *x})
 }
 
 func (s *BothStarted) apply(instance *Instance, e event) Snapshot {
@@ -321,24 +277,10 @@ func (s *BothStarted) apply(instance *Instance, e event) Snapshot {
 	}
 }
 
-func (x *BothStarted) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		State string
-		BothStarted
-	}{"BothStarted", *x})
-}
-
 func (s *Stopped) apply(instance *Instance, e event) Snapshot {
 	switch e := e.(type) {
 	default:
 		instance.logger.WithField("event", e).Warn("Unexpected event")
 		return s
 	}
-}
-
-func (x *Stopped) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		State string
-		Stopped
-	}{"Stopped", *x})
 }
