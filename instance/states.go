@@ -3,6 +3,7 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/prepor/condo/docker"
@@ -14,28 +15,17 @@ type Snapshot interface {
 	fmt.Stringer
 	json.Marshaler
 	apply(instance *Instance, e event) Snapshot
+	CliStatus(w io.Writer)
 }
 
 type Init struct {
 }
 
-func (x *Init) String() string {
-	return "Init"
-}
-
 type Stopped struct {
-}
-
-func (x *Stopped) String() string {
-	return "Stopped"
 }
 
 type Wait struct {
 	Container *docker.Container
-}
-
-func (x *Wait) String() string {
-	return "Wait"
 }
 
 type TryAgain struct {
@@ -43,25 +33,13 @@ type TryAgain struct {
 	Spec *spec.Spec
 }
 
-func (x *TryAgain) String() string {
-	return "TryAgain"
-}
-
 type Stable struct {
 	Container *docker.Container
-}
-
-func (x *Stable) String() string {
-	return "Stable"
 }
 
 type WaitNext struct {
 	Current *docker.Container
 	Next    *docker.Container
-}
-
-func (x *WaitNext) String() string {
-	return "WaitNext"
 }
 
 type TryAgainNext struct {
@@ -70,18 +48,10 @@ type TryAgainNext struct {
 	Spec    *spec.Spec
 }
 
-func (x *TryAgainNext) String() string {
-	return "TryAgainNext"
-}
-
 type BothStarted struct {
 	Prev *docker.Container
 	Next *docker.Container
 	id   uuid.UUID
-}
-
-func (x *BothStarted) String() string {
-	return "BothStarted"
 }
 
 func (x *Instance) scheduleTry() uuid.UUID {

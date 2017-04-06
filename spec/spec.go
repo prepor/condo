@@ -124,6 +124,14 @@ func (s *Spec) ContainerConfigs() (*container.Config, *container.HostConfig, *ne
 	return &config, &hostConfig, &networkingConfig, nil
 }
 
+func (x *Spec) Image() string {
+	config, _, _, err := x.ContainerConfigs()
+	if err != nil {
+		return ""
+	}
+	return config.Image
+}
+
 func (x *Spec) IsAfter() bool {
 	_, ok := x.Deploy.Strategy.(After)
 	return ok
