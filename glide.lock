@@ -1,5 +1,5 @@
 hash: e09a0858df38d8cf71f4d06131da5baa94e5e00727916ba9af6996359bc9b8b0
-updated: 2017-04-06T19:29:36.324951832+03:00
+updated: 2017-04-06T20:02:30.544287063+03:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 346938d642f2ec3594ed81d874461961cd0faa76
@@ -37,6 +37,8 @@ imports:
   - tlsconfig
 - name: github.com/docker/go-units
   version: 0dadbb0345b35ec7ef35e228dabb8de89a65bf52
+- name: github.com/fatih/color
+  version: 9131ab34cf20d2f6d83fdc67168a5430d1c7dc23
 - name: github.com/fsouza/go-dockerclient
   version: 87c7e50e0bcf800ed863c3c3b0fbcc67e3029140
 - name: github.com/GeertJohan/go.rice
@@ -51,6 +53,12 @@ imports:
   version: 2a3aa15961d5fee6047b8151b67ac2f08ba2c48c
 - name: github.com/jroimartin/gocui
   version: 612b0b2987ec1a6af46d7008cef1efd4b3898346
+- name: github.com/mattn/go-colorable
+  version: 5411d3eea5978e6cdc258b30de592b60df6aba96
+  repo: https://github.com/mattn/go-colorable
+- name: github.com/mattn/go-isatty
+  version: 57fdcb988a5c543893cc61bce354a6e24ab70022
+  repo: https://github.com/mattn/go-isatty
 - name: github.com/mattn/go-runewidth
   version: 14207d285c6c197daabb5c9793d63e7af9ab2d50
 - name: github.com/meatballhat/negroni-logrus
@@ -89,7 +97,7 @@ imports:
   - context/ctxhttp
   - proxy
 - name: golang.org/x/sys
-  version: 9a7256cb28ed514b4e1e5f68959914c4c28a92e0
+  version: e24f485414aeafb646f6fca458b0bf869c0880a1
   subpackages:
   - unix
   - windows
