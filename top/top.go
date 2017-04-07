@@ -151,7 +151,7 @@ func layout(g *gocui.Gui) error {
 }
 
 func Go(address string) {
-	g, err := gocui.NewGui(gocui.Output256)
+	g, err := gocui.NewGui(gocui.OutputNormal)
 
 	states = make(map[string]*gabs.Container)
 
