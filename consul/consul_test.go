@@ -1,6 +1,7 @@
 package consul
 
 import (
+	"bytes"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Jeffail/gabs"
-	"github.com/davecgh/go-spew/spew"
 	consul "github.com/hashicorp/consul/api"
 	"github.com/prepor/condo/docker"
 	"github.com/prepor/condo/expose"
@@ -61,15 +61,15 @@ func watchKey(t *testing.T, client *consul.Client, k string) <-chan *gabs.Contai
 	kv := client.KV()
 	res := make(chan *gabs.Container)
 	var (
-		v       *consul.KVPair
-		meta    *consul.QueryMeta
-		err     error
-		options = &consul.QueryOptions{}
+		v         *consul.KVPair
+		meta      *consul.QueryMeta
+		prevValue = []byte("---init---")
+		err       error
+		options   = &consul.QueryOptions{}
 	)
 	go func() {
 		for {
 			v, meta, err = kv.Get(k, options)
-			spew.Dump(v, meta, err)
 			if err != nil {
 				time.Sleep(100 * time.Millisecond)
 				continue
@@ -78,12 +78,20 @@ func watchKey(t *testing.T, client *consul.Client, k string) <-chan *gabs.Contai
 			options.WaitIndex = meta.LastIndex
 
 			if v == nil {
-				res <- nil
+				if prevValue != nil {
+					res <- nil
+				}
+				prevValue = nil
 				continue
 			}
-			c, err := gabs.ParseJSON(v.Value)
-			require.NoError(t, err)
-			res <- c
+
+			if !bytes.Equal(v.Value, prevValue) {
+				c, err := gabs.ParseJSON(v.Value)
+				require.NoError(t, err)
+				res <- c
+				prevValue = v.Value
+			}
+
 		}
 	}()
 	return res
