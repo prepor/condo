@@ -69,6 +69,7 @@ func watchKey(t *testing.T, client *consul.Client, k string) <-chan *gabs.Contai
 	go func() {
 		for {
 			v, meta, err = kv.Get(k, options)
+			spew.Dump(v, meta, err)
 			if err != nil {
 				time.Sleep(100 * time.Millisecond)
 				continue
@@ -80,7 +81,6 @@ func watchKey(t *testing.T, client *consul.Client, k string) <-chan *gabs.Contai
 				res <- nil
 				continue
 			}
-			spew.Dump(v)
 			c, err := gabs.ParseJSON(v.Value)
 			require.NoError(t, err)
 			res <- c
