@@ -37,7 +37,10 @@ func testPrepare(t *testing.T) (string, *Supervisor, chan *testInstance) {
 
 	go func() {
 		for {
-			i := <-instances
+			i, ok := <-instances
+			if !ok {
+				break
+			}
 			snapshots := i.Subsribe("test")
 			testInstances <- &testInstance{
 				instance:  i,
