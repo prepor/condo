@@ -48,13 +48,14 @@ func (x *Instance) Start() {
 			s  *spec.Spec
 			ok bool
 		)
+	Loop:
 		for {
 			s, ok = <-newSpecs
 			if ok {
 				select {
 				case x.events <- eventNewSpec{spec: s}:
 				case <-x.done:
-					break
+					break Loop
 				}
 
 			} else {
@@ -109,7 +110,7 @@ func (x *Instance) Stop() {
 	<-x.eventsLoopDone
 }
 
-func (x *Instance) AddSubsriber(k interface{}) <-chan Snapshot {
+func (x *Instance) Subsribe(k interface{}) <-chan Snapshot {
 	x.subscribersMutex.Lock()
 	defer x.subscribersMutex.Unlock()
 
@@ -118,7 +119,7 @@ func (x *Instance) AddSubsriber(k interface{}) <-chan Snapshot {
 	return ch
 }
 
-func (x *Instance) RemoveSubscriber(k interface{}) {
+func (x *Instance) Unsubscribe(k interface{}) {
 	x.subscribersMutex.Lock()
 	defer x.subscribersMutex.Unlock()
 

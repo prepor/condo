@@ -8,20 +8,20 @@ import (
 )
 
 type Supervisor struct {
-	system            *system.System
-	instances         map[string]*instance.Instance
-	group             *sync.WaitGroup
-	newCallbacks      map[interface{}]func(*instance.Instance)
-	newCallbacksMutex sync.Mutex
+	system             *system.System
+	instances          map[string]*instance.Instance
+	group              *sync.WaitGroup
+	subscriptions      map[interface{}]chan<- *instance.Instance
+	subscriptionsMutex sync.Mutex
 }
 
 func New(system *system.System) *Supervisor {
 	return &Supervisor{
-		system:            system,
-		instances:         make(map[string]*instance.Instance),
-		group:             &sync.WaitGroup{},
-		newCallbacks:      make(map[interface{}]func(*instance.Instance)),
-		newCallbacksMutex: sync.Mutex{},
+		system:             system,
+		instances:          make(map[string]*instance.Instance),
+		group:              &sync.WaitGroup{},
+		subscriptions:      make(map[interface{}]chan<- *instance.Instance),
+		subscriptionsMutex: sync.Mutex{},
 	}
 }
 
@@ -38,22 +38,24 @@ func (x *Supervisor) Start() {
 	}()
 }
 
-func (x *Supervisor) RegisterNewCallback(k interface{}, clb func(*instance.Instance)) {
-	x.newCallbacksMutex.Lock()
-	defer x.newCallbacksMutex.Unlock()
-	x.newCallbacks[k] = clb
+func (x *Supervisor) Subscribe(k interface{}) <-chan *instance.Instance {
+	x.subscriptionsMutex.Lock()
+	defer x.subscriptionsMutex.Unlock()
+	ch := make(chan *instance.Instance)
+	x.subscriptions[k] = ch
+	return ch
 }
 
-func (x *Supervisor) DegisterNewCallback(k interface{}) {
-	x.newCallbacksMutex.Lock()
-	defer x.newCallbacksMutex.Unlock()
-	delete(x.newCallbacks, k)
+func (x *Supervisor) Unsubscribe(k interface{}) {
+	x.subscriptionsMutex.Lock()
+	defer x.subscriptionsMutex.Unlock()
+	delete(x.subscriptions, k)
 }
 
 func (x *Supervisor) worker() {
 	events := x.system.Specs.WatchSpecs(x.system.Done)
+	x.group.Add(1)
 	go func() {
-		x.group.Add(1)
 		defer x.group.Done()
 		for {
 			e, ok := <-events
@@ -65,17 +67,20 @@ func (x *Supervisor) worker() {
 			case system.NewSpec:
 				instance := instance.New(x.system, e.SpecName())
 				x.instances[e.SpecName()] = instance
-				x.newCallbacksMutex.Lock()
-				for _, v := range x.newCallbacks {
-					v(instance)
+				x.subscriptionsMutex.Lock()
+				for _, v := range x.subscriptions {
+					v <- instance
 				}
-				x.newCallbacksMutex.Unlock()
+				x.subscriptionsMutex.Unlock()
 				instance.Start()
 			case system.RemovedSpec:
 				instance := x.instances[e.SpecName()]
 				instance.Stop()
 				delete(x.instances, e.SpecName())
 			}
+		}
+		for _, v := range x.subscriptions {
+			close(v)
 		}
 	}()
 }

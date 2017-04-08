@@ -1,5 +1,7 @@
 package util
 
+import "math/rand"
+
 func DiffStrings(slice1 []string, slice2 []string) (new []string, removed []string) {
 NewLoop:
 	for _, v2 := range slice2 {
@@ -23,4 +25,14 @@ RemovedLoop:
 
 	return
 
+}
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func RandStringBytes(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
 }

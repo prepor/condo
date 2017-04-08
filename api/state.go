@@ -11,9 +11,9 @@ type stateManager struct {
 	closedReadStreams chan chan<- *StreamAnswer
 }
 
-type clbKeyType string
+type subscriptionKeyType string
 
-var clbKey = clbKeyType("api-state-manager")
+var subscriptionKey = subscriptionKeyType("api-state-manager")
 
 type newSnapshot struct {
 	name     string
@@ -26,20 +26,23 @@ func newStateManager(supervisor *supervisor.Supervisor) *stateManager {
 	closedReadStreams := make(chan chan<- *StreamAnswer)
 	streams := make([]chan<- *StreamAnswer, 0)
 	instances := make(map[string]instance.Snapshot)
-	newInstances := make(chan *instance.Instance)
+	newInstances := supervisor.Subscribe(subscriptionKey)
 	removedInstances := make(chan *instance.Instance)
 	snapshots := make(chan *newSnapshot)
-
-	supervisor.RegisterNewCallback(clbKey, func(i *instance.Instance) {
-		newInstances <- i
-	})
 
 	go func() {
 		for {
 			select {
-			case i := <-newInstances:
+			case i, ok := <-newInstances:
+				if !ok {
+					// FIXME should provide graceful stop if
+					// we stop loop here it stops listen
+					// snapshots and removedInstances and
+					// blocks app
+					break
+				}
 				instances[i.Name] = &instance.Init{}
-				iSnapshots := i.AddSubsriber(clbKey)
+				iSnapshots := i.Subsribe(subscriptionKey)
 				go func() {
 					for {
 						s, ok := <-iSnapshots
@@ -90,7 +93,6 @@ func newStateManager(supervisor *supervisor.Supervisor) *stateManager {
 				streams = newStreams
 			}
 		}
-
 	}()
 
 	return &stateManager{

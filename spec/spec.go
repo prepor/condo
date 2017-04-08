@@ -105,6 +105,7 @@ func (s *Spec) ContainerConfigs() (*container.Config, *container.HostConfig, *ne
 		err := errors.New("Container spec should be map")
 		return nil, nil, nil, err
 	}
+
 	hostConfigRaw := unspecific["HostConfig"]
 	networkingConfigRaw := unspecific["NetworkingConfig"]
 	delete(unspecific, "HostConfig")

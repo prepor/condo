@@ -14,7 +14,9 @@ import (
 	dockerTypes "github.com/docker/docker/api/types"
 	cli "github.com/jawher/mow.cli"
 	"github.com/prepor/condo/api"
+	"github.com/prepor/condo/consul"
 	"github.com/prepor/condo/docker"
+	"github.com/prepor/condo/expose"
 	"github.com/prepor/condo/spec"
 	"github.com/prepor/condo/supervisor"
 	"github.com/prepor/condo/system"
@@ -54,11 +56,7 @@ func Go() {
 	auths := dockerAuths{}
 	app.VarOpt("docker-auth", &auths, "Docker registry host:login:password")
 
-	verbose := app.Bool(cli.BoolOpt{
-		Name:  "verbose",
-		Value: false,
-		Desc:  "Enable debug logs",
-	})
+	verbose := app.BoolOpt("verbose", false, "Enable debug logs")
 
 	app.Spec = "[--docker-auth]... [--verbose]"
 
@@ -93,7 +91,10 @@ func Go() {
 	app.Command("start", "Start condo daemon with specs provider", func(cmd *cli.Cmd) {
 		directory := cmd.StringOpt("directory", "", "Path to directory with condo's specs")
 		listen := cmd.StringOpt("listen", ":4765", "Provides HTTP API and dashboard")
-		cmd.Spec = "--directory=<path> [--listen=<addr>]"
+		systemName := cmd.StringOpt("instance-name", "", "Id of this instance. Can be used in exposing")
+
+		consulPrefix := cmd.StringOpt("expose-consul", "", "Expose state to consul with provided prefix")
+		cmd.Spec = "--directory=<path> [--listen=<addr>] [--expose-consul=<prefix>] [--instance-name=<name>]"
 		cmd.Action = func() {
 			sigs := make(chan os.Signal, 1)
 			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -108,10 +109,19 @@ func Go() {
 			specs := system.NewDirectorySpecs(*directory)
 			system := system.New(docker, specs)
 
+			if *systemName != "" {
+				system.SetName(*systemName)
+			}
+
 			sup := supervisor.New(system)
 
 			if *listen != "" {
 				api.New(system, sup, *listen)
+			}
+
+			if *consulPrefix != "" {
+				exposer := consul.New(*consulPrefix)
+				expose.New(system, sup, exposer)
 			}
 			sup.Start()
 

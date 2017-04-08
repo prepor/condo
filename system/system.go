@@ -1,6 +1,7 @@
 package system
 
 import (
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -27,6 +28,7 @@ type System struct {
 	Components *sync.WaitGroup
 	Done       <-chan struct{}
 	done       chan struct{}
+	systemName string
 }
 
 func New(docker *docker.Docker, specs Specer) *System {
@@ -43,6 +45,20 @@ func New(docker *docker.Docker, specs Specer) *System {
 func (x *System) Stop() {
 	close(x.done)
 	x.Components.Wait()
+}
+
+func (x *System) SetName(n string) {
+	x.systemName = n
+}
+
+func (x *System) Name() string {
+	if x.systemName != "" {
+		return x.systemName
+	}
+	if v, err := os.Hostname(); err == nil {
+		return v
+	}
+	return util.RandStringBytes(6)
 }
 
 type directorySpecs struct {

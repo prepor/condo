@@ -1,5 +1,5 @@
-hash: e09a0858df38d8cf71f4d06131da5baa94e5e00727916ba9af6996359bc9b8b0
-updated: 2017-04-06T20:02:30.544287063+03:00
+hash: 79f438e0efa561e82a90b0f6b154381f3c40e863bab6afd5b8a8ac9bee914759
+updated: 2017-04-06T21:24:45.298921005+03:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 346938d642f2ec3594ed81d874461961cd0faa76
@@ -47,6 +47,10 @@ imports:
   version: 470b0ab438bbcd34ad4b5cab3d1eb1c13d69d6b9
 - name: github.com/gorilla/websocket
   version: 3ab3a8b8831546bd18fd182c20687ca853b2bb13
+- name: github.com/hashicorp/consul
+  version: 402636ff2db998edef392ac6d59210d2170b3ebf
+  subpackages:
+  - api
 - name: github.com/jawher/mow.cli
   version: d3ffbc2f98b83e09dc8efd55ecec75eb5fd656ec
 - name: github.com/Jeffail/gabs

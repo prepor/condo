@@ -27,3 +27,7 @@ import:
 - package: github.com/Jeffail/gabs
   version: ^1.0.0
 - package: github.com/nwidger/jsoncolor
+- package: github.com/hashicorp/consul
+  version: ^0.8.0
+  subpackages:
+  - api

@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/websocket"
 	negronilogrus "github.com/meatballhat/negroni-logrus"
 	"github.com/prepor/condo/supervisor"
@@ -37,7 +36,6 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 func (x *API) stateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	current := x.stateManager.readCurrent()
-	spew.Dump(current)
 	if err := json.NewEncoder(w).Encode(current); err != nil {
 		log.WithError(err).Error("JSON encoding error in stateHandler")
 	}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/rand"
 
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	dockerTypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/prepor/condo/spec"
+	"github.com/prepor/condo/util"
 )
 
 type Container struct {
@@ -37,16 +37,6 @@ type Docker struct {
 type Auth struct {
 	Registry string
 	Config   *dockerTypes.AuthConfig
-}
-
-const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-func randStringBytes(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letterBytes[rand.Intn(len(letterBytes))]
-	}
-	return string(b)
 }
 
 func New(auths []Auth) *Docker {
@@ -105,7 +95,7 @@ func (d *Docker) Start(l *logrus.Entry, name string, spec *spec.Spec) (container
 		return
 	}
 
-	name = fmt.Sprintf("%s_%s", name, randStringBytes(10))
+	name = fmt.Sprintf("%s_%s", name, util.RandStringBytes(10))
 
 	d.client.ContainerRemove(ctx, name, dockerTypes.ContainerRemoveOptions{Force: true})
 

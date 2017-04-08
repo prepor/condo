@@ -27,7 +27,7 @@ func testPrepare(t *testing.T) (string, *Instance, <-chan Snapshot) {
 
 	instance := New(system, "spec1")
 
-	snapshots := instance.AddSubsriber("tests")
+	snapshots := instance.Subsribe("tests")
 	return dir, instance, snapshots
 }
 

@@ -32,15 +32,20 @@ func testPrepare(t *testing.T) (string, *Supervisor, chan *testInstance) {
 	system := system.New(docker, specs)
 
 	supervisor := New(system)
-	instances := make(chan *testInstance)
-	supervisor.RegisterNewCallback("test", func(i *instance.Instance) {
-		snapshots := i.AddSubsriber("test")
-		instances <- &testInstance{
-			instance:  i,
-			snapshots: snapshots,
+	testInstances := make(chan *testInstance)
+	instances := supervisor.Subscribe("test")
+
+	go func() {
+		for {
+			i := <-instances
+			snapshots := i.Subsribe("test")
+			testInstances <- &testInstance{
+				instance:  i,
+				snapshots: snapshots,
+			}
 		}
-	})
-	return dir, supervisor, instances
+	}()
+	return dir, supervisor, testInstances
 }
 
 func TestSupervisor(t *testing.T) {
