@@ -136,6 +136,12 @@ Loop:
 		}
 	}
 
+	states := <-exposer.ReceiveStates(nil)
+	require.Equal(t, 1, len(states))
+	c, err := gabs.Consume(states[0].Snapshot)
+	require.NoError(t, err)
+	require.Equal(t, "Stable", c.S("State").Data().(string))
+
 	os.Remove(filepath.Join(dir, "nginx.edn"))
 	require.IsType(t, new(instance.Stopped), <-nginx.snapshots)
 	require.Nil(t, <-kWatcher)

@@ -2,9 +2,11 @@ package consul
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/davecgh/go-spew/spew"
 	consul "github.com/hashicorp/consul/api"
 	"github.com/prepor/condo/expose"
 	"github.com/prepor/condo/instance"
@@ -34,9 +36,59 @@ func (x *Self) SaveState(instance *expose.Instance) {
 	x.writes <- instance
 }
 
-func (x *Self) ReceiveStates(revision int) ([]*expose.Instance, error) {
-	instances := make([]*expose.Instance, 1)
-	return instances, nil
+func (x *Self) ReceiveStates(done <-chan struct{}) <-chan []*expose.Instance {
+	instances := make(chan []*expose.Instance)
+	go func() {
+		inner := make(chan consul.KVPairs, 1)
+		options := &consul.QueryOptions{}
+	Loop:
+		for {
+			go func() {
+			ListLoop:
+				for {
+					res, meta, err := x.client.KV().List(x.prefix, options)
+					if err != nil {
+						select {
+						case <-done:
+							return
+						case <-time.After(time.Second):
+							continue ListLoop
+						}
+					}
+					options.WaitIndex = meta.LastIndex
+					inner <- res
+					return
+
+				}
+			}()
+			select {
+			case <-done:
+				break Loop
+			case pairs := <-inner:
+				res := make([]*expose.Instance, len(pairs))
+				for i, v := range pairs {
+					parts := strings.Split(v.Key, "/")
+
+					var snapshot interface{}
+					spew.Dump(v)
+					err := json.Unmarshal(v.Value, &snapshot)
+					if err != nil {
+						log.WithError(err).Error("Can't parse JSON")
+						res[i] = nil
+						continue
+					}
+					res[i] = &expose.Instance{
+						Condo:    parts[len(parts)-2],
+						Service:  parts[len(parts)-1],
+						Snapshot: snapshot,
+					}
+				}
+				instances <- res
+			}
+		}
+		close(instances)
+	}()
+	return instances
 }
 
 func (x *Self) Stop() {

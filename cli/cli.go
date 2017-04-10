@@ -115,13 +115,17 @@ func Go() {
 
 			sup := supervisor.New(system)
 
+			var httpApi *api.API
 			if *listen != "" {
-				api.New(system, sup, *listen)
+				httpApi = api.New(system, sup, *listen)
 			}
 
 			if *consulPrefix != "" {
 				exposer := consul.New(*consulPrefix)
 				expose.New(system, sup, exposer)
+				if httpApi != nil {
+					httpApi.SetExposer(exposer)
+				}
 			}
 			sup.Start()
 

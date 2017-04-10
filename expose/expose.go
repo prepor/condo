@@ -16,7 +16,7 @@ type Instance struct {
 
 type Exposer interface {
 	SaveState(instance *Instance)
-	ReceiveStates(revision int) ([]*Instance, error)
+	ReceiveStates(done <-chan struct{}) <-chan []*Instance
 }
 
 type subscriptionKeyType string
@@ -79,8 +79,4 @@ func (x *Self) instanceWatcher(i *instance.Instance) {
 			Snapshot: s,
 		})
 	}
-}
-
-func (x *Self) Receive(revision int) ([]*Instance, error) {
-	return x.exposer.ReceiveStates(revision)
 }
