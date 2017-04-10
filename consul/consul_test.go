@@ -2,7 +2,6 @@ package consul
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Jeffail/gabs"
-	"github.com/davecgh/go-spew/spew"
 	consul "github.com/hashicorp/consul/api"
 	"github.com/prepor/condo/docker"
 	"github.com/prepor/condo/expose"
@@ -32,6 +30,7 @@ func testPrepare(t *testing.T) (string, *system.System, *supervisor.Supervisor, 
 	docker := docker.New(nil)
 	specs := system.NewDirectorySpecs(dir)
 	system := system.New(docker, specs)
+	system.SetName("test")
 
 	supervisor := supervisor.New(system)
 	testInstances := make(chan *testInstance)
@@ -72,7 +71,6 @@ func watchKey(t *testing.T, client *consul.Client, k string) <-chan *gabs.Contai
 	go func() {
 		for {
 			v, meta, err = kv.Get(k, options)
-			spew.Dump(v, meta, err)
 			if err != nil {
 				time.Sleep(100 * time.Millisecond)
 				continue
@@ -117,21 +115,17 @@ func TestBasicCase(t *testing.T) {
 	exposer := New("condo")
 	expose.New(system, supervisor, exposer)
 
-	kWatcher := watchKey(t, exposer.client, "condo/Andrews-MacBook-Air.local/nginx")
+	kWatcher := watchKey(t, exposer.client, "condo/test/nginx")
 
 	require.Nil(t, <-kWatcher)
 
 	makeFile(t, dir, "nginx.edn", `{:spec {:Image "prepor/condo-test:good"}}`)
 
 	nginx := <-instances
-	fmt.Println("---TEST1")
 	require.IsType(t, new(instance.Wait), <-nginx.snapshots)
-	fmt.Println("---TEST2")
 	require.IsType(t, new(instance.Stable), <-nginx.snapshots)
-	fmt.Println("---TEST3")
 Loop:
 	for {
-		fmt.Println("Tick!")
 		switch (<-kWatcher).Path("State").Data().(string) {
 		case "Stable":
 			break Loop
@@ -141,7 +135,6 @@ Loop:
 			t.FailNow()
 		}
 	}
-	fmt.Println("---TEST4")
 
 	os.Remove(filepath.Join(dir, "nginx.edn"))
 	require.IsType(t, new(instance.Stopped), <-nginx.snapshots)
