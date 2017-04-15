@@ -153,16 +153,17 @@
    :children [[local-services]]])
 
 (defn states [page]
-  [c/v-box
-   :max-width "1280px"
-   :style {:padding-top "10px"
-           :margin-left "auto"
-           :margin-right "gap"}
-   :gap "2em"
-   :children [[header]
-              (case page
-                :local [local-content]
-                [content])]])
+  (let [local-only @(subscribe [:local-only])]
+    [c/v-box
+     :max-width "1280px"
+     :style {:padding-top "10px"
+             :margin-left "auto"
+             :margin-right "auto"}
+     :gap "2em"
+     :children [(when-not local-only [header])
+                (case page
+                  :local [local-content]
+                  [content])]]))
 
 (defn message [class msg]
   [c/box

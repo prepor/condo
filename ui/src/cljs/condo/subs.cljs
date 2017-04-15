@@ -8,6 +8,7 @@
 (reg-sub :global #(:global %))
 (reg-sub :now #(:now %))
 (reg-sub :filter #(:filter %))
+(reg-sub :local-only #(:local-only %))
 
 (defn color [snapshot]
   (case (:State snapshot)
