@@ -153,8 +153,6 @@ func layout(g *gocui.Gui) error {
 func Go(address string) {
 	g, err := gocui.NewGui(gocui.OutputNormal)
 
-	states = make(map[string]*gabs.Container)
-
 	// now := time.Now()
 
 	// states = map[string]instance.Snapshot{
@@ -223,25 +221,21 @@ func Go(address string) {
 
 	go func() {
 		for {
-			var message interface{}
+			var message map[string]interface{}
 			err := c.ReadJSON(&message)
 			if err != nil {
 				log.WithError(err).Fatal("Can't parse JSON message")
 			}
 			lock.Lock()
-			// spew.Config.DisableMethods = true
+			states = make(map[string]*gabs.Container)
+			for k, v := range message {
+				c, err := gabs.Consume(v)
+				if err != nil {
+					log.Fatal(err)
+				}
+				states[k] = c
+			}
 
-			// spew.Dump(message)
-			c, err := gabs.Consume(message)
-			if err != nil {
-				log.Fatal(err)
-			}
-			name := c.Path("Name").Data().(string)
-			if c.Path("Snapshot.State").Data().(string) == "Stopped" {
-				delete(states, name)
-			} else {
-				states[name] = c.Path("Snapshot")
-			}
 			lock.Unlock()
 			g.Execute(layout)
 		}

@@ -70,6 +70,9 @@ func (x *API) globalStateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (x *API) globalStateStreamHandler(w http.ResponseWriter, r *http.Request) {
+	if !x.checkExposer(w) {
+		return
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.WithError(err).Error("Can't upgrade websocket connection")
@@ -136,6 +139,8 @@ func (x *API) worker(system *system.System, address string) error {
 
 	mux.HandleFunc("/v1/global-state", x.globalStateHandler)
 	mux.HandleFunc("/v1/global-state-stream", x.globalStateStreamHandler)
+
+	mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(http.Dir("ui/resources/public"))))
 
 	n := negroni.New(negroni.NewRecovery())
 	n.Use(negronilogrus.NewMiddleware())

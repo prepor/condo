@@ -6,7 +6,6 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/davecgh/go-spew/spew"
 	consul "github.com/hashicorp/consul/api"
 	"github.com/prepor/condo/expose"
 	"github.com/prepor/condo/instance"
@@ -70,7 +69,6 @@ func (x *Self) ReceiveStates(done <-chan struct{}) <-chan []*expose.Instance {
 					parts := strings.Split(v.Key, "/")
 
 					var snapshot interface{}
-					spew.Dump(v)
 					err := json.Unmarshal(v.Value, &snapshot)
 					if err != nil {
 						log.WithError(err).Error("Can't parse JSON")

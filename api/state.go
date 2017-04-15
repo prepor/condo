@@ -6,9 +6,9 @@ import (
 )
 
 type stateManager struct {
-	readRequests      chan chan<- map[string]instance.Snapshot
-	readStreams       chan chan<- *StreamAnswer
-	closedReadStreams chan chan<- *StreamAnswer
+	readRequests      chan chan<- state
+	readStreams       chan chan<- state
+	closedReadStreams chan chan<- state
 }
 
 type subscriptionKeyType string
@@ -20,15 +20,25 @@ type newSnapshot struct {
 	snapshot instance.Snapshot
 }
 
+type state map[string]instance.Snapshot
+
 func newStateManager(supervisor *supervisor.Supervisor) *stateManager {
-	readRequests := make(chan chan<- map[string]instance.Snapshot)
-	readStreams := make(chan chan<- *StreamAnswer)
-	closedReadStreams := make(chan chan<- *StreamAnswer)
-	streams := make([]chan<- *StreamAnswer, 0)
-	instances := make(map[string]instance.Snapshot)
+	readRequests := make(chan chan<- state)
+	readStreams := make(chan chan<- state)
+	closedReadStreams := make(chan chan<- state)
+	streams := make([]chan<- state, 0)
+	instances := make(state)
 	newInstances := supervisor.Subscribe(subscriptionKey)
 	removedInstances := make(chan *instance.Instance)
 	snapshots := make(chan *newSnapshot)
+
+	copyState := func() state {
+		s2 := make(state)
+		for k, v := range instances {
+			s2[k] = v
+		}
+		return s2
+	}
 
 	go func() {
 		for {
@@ -59,13 +69,13 @@ func newStateManager(supervisor *supervisor.Supervisor) *stateManager {
 				}()
 			case i := <-removedInstances:
 				delete(instances, i.Name)
+				for _, stream := range streams {
+					stream <- copyState()
+				}
 			case s := <-snapshots:
 				instances[s.name] = s.snapshot
 				for _, stream := range streams {
-					stream <- &StreamAnswer{
-						Name:     s.name,
-						Snapshot: s.snapshot,
-					}
+					stream <- copyState()
 				}
 			case r := <-readRequests:
 				a := make(map[string]instance.Snapshot)
@@ -74,12 +84,7 @@ func newStateManager(supervisor *supervisor.Supervisor) *stateManager {
 				}
 				r <- a
 			case r := <-readStreams:
-				for k, v := range instances {
-					r <- &StreamAnswer{
-						Name:     k,
-						Snapshot: v,
-					}
-				}
+				r <- copyState()
 				streams = append(streams, r)
 			case s := <-closedReadStreams:
 				newStreams := streams[:0]
@@ -102,19 +107,14 @@ func newStateManager(supervisor *supervisor.Supervisor) *stateManager {
 	}
 }
 
-func (x *stateManager) readCurrent() map[string]instance.Snapshot {
-	a := make(chan map[string]instance.Snapshot)
+func (x *stateManager) readCurrent() state {
+	a := make(chan state)
 	x.readRequests <- a
 	return <-a
 }
 
-type StreamAnswer struct {
-	Name     string
-	Snapshot instance.Snapshot
-}
-
-func (x *stateManager) readStream(done <-chan struct{}) <-chan *StreamAnswer {
-	a := make(chan *StreamAnswer)
+func (x *stateManager) readStream(done <-chan struct{}) <-chan state {
+	a := make(chan state)
 	x.readStreams <- a
 	go func() {
 		<-done
