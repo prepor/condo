@@ -2,9 +2,7 @@
 set -e
 
 echo "--> Installing dependency manager..."
-curl https://glide.sh/get | sh
-
+go get github.com/tools/godep
 
 echo "--> Vendoring..."
-glide install
-
+godep restore
