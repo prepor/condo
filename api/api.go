@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/websocket"
 	negronilogrus "github.com/meatballhat/negroni-logrus"
 	"github.com/prepor/condo/expose"
+	"github.com/prepor/condo/static"
 	"github.com/prepor/condo/supervisor"
 	"github.com/prepor/condo/system"
 	"github.com/urfave/negroni"
@@ -140,7 +142,11 @@ func (x *API) worker(system *system.System, address string) error {
 	mux.HandleFunc("/v1/global-state", x.globalStateHandler)
 	mux.HandleFunc("/v1/global-state-stream", x.globalStateStreamHandler)
 
-	mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(http.Dir("ui/resources/public"))))
+	if os.Getenv("LIVE_UI") == "" {
+		mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(static.HTTP)))
+	} else {
+		mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(http.Dir("ui/resources/public"))))
+	}
 
 	n := negroni.New(negroni.NewRecovery())
 	n.Use(negronilogrus.NewMiddleware())

@@ -40,6 +40,11 @@ GOMAXPROCS ?= 4
 # container. Invokers can override the target OS or architecture using
 # environment variables.
 bin:
+	@echo "==> Compile ClojureScript for ${PROJECT}..."
+	@$(MAKE) -C ui prod
+	@echo "==> Generate ${PROJECT}..."
+	@go generate
+
 	@echo "==> Building ${PROJECT}..."
 	@docker run \
 		--interactive \

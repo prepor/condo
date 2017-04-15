@@ -138,11 +138,15 @@ One of the main reasons why condo exists is because a deployment tool should be 
 
 ## Build
 
-You will need go and glide
+You will need go and godep
 
-    glide i
+    godep restore
     go run main.go
 
+Release build
+
+    make bin docker release
+    
 ## Credits
 
 * Andrew Rudenko @prepor

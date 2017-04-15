@@ -1,0 +1,10 @@
+pkg: static
+dest: static
+
+compression:
+  compress: true
+
+custom:
+  - files: 
+    - "./ui/resources/public/"
+    base: "ui/resources/public/"
