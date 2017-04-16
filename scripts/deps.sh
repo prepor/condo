@@ -6,3 +6,6 @@ set -e
 
 # echo "--> Vendoring..."
 # godep restore
+
+go get -u github.com/UnnoTed/fileb0x
+go generate
