@@ -66,8 +66,7 @@ func Test_directorySpecs_ReceiveSpecs(t *testing.T) {
 		Spec: map[interface{}]interface{}{
 			edn.Keyword("Image"): "prepor/condo-test:good",
 		},
-		HealthTimeout: 10,
-		StopTimeout:   10},
+		StopTimeout: 10},
 		<-updates)
 
 	makeFile(`{:spec {:Image "prepor/condo-test:bad"}}`)
@@ -75,8 +74,7 @@ func Test_directorySpecs_ReceiveSpecs(t *testing.T) {
 		Spec: map[interface{}]interface{}{
 			edn.Keyword("Image"): "prepor/condo-test:bad",
 		},
-		HealthTimeout: 10,
-		StopTimeout:   10},
+		StopTimeout: 10},
 		<-updates)
 
 	close(done)

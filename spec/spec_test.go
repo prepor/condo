@@ -32,8 +32,7 @@ func TestParsing(t *testing.T) {
 					"HOST=localhost",
 				},
 			},
-			HealthTimeout: 10,
-			StopTimeout:   5},
+			StopTimeout: 5},
 		spec)
 
 	config, hostConfig, networkingConfig, err := spec.ContainerConfigs()

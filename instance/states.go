@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/prepor/condo/docker"
 	"github.com/prepor/condo/spec"
 	uuid "github.com/satori/go.uuid"
 )
@@ -23,7 +22,7 @@ type Stopped struct {
 }
 
 type Wait struct {
-	Container *docker.Container
+	Container *Container
 }
 
 type TryAgain struct {
@@ -32,23 +31,23 @@ type TryAgain struct {
 }
 
 type Stable struct {
-	Container *docker.Container
+	Container *Container
 }
 
 type WaitNext struct {
-	Current *docker.Container
-	Next    *docker.Container
+	Current *Container
+	Next    *Container
 }
 
 type TryAgainNext struct {
-	Current *docker.Container
+	Current *Container
 	id      uuid.UUID
 	Spec    *spec.Spec
 }
 
 type BothStarted struct {
-	Prev *docker.Container
-	Next *docker.Container
+	Prev *Container
+	Next *Container
 	id   uuid.UUID
 }
 
@@ -92,46 +91,27 @@ func (x *Instance) scheduleDeployCompleted(duration time.Duration) uuid.UUID {
 	return tryID
 }
 
-func (x *Instance) startHealthchecks(container *docker.Container) {
-	x.group.Add(1)
-	defer x.group.Done()
-	res := make(chan event, 1)
-	go func() {
-		var e event
-		if container.WaitHealthchecks() {
-			e = eventHealthy{containerId: container.Id}
-		} else {
-			e = eventUnhealthy{containerId: container.Id}
-		}
-		res <- e
-	}()
-
-	select {
-	case e := <-res:
-		x.events <- e
-	case <-x.done:
-	}
-}
-
 func (x *Instance) startOrTryAgain(spec *spec.Spec) Snapshot {
-	container, err := x.system.Docker.Start(x.logger, x.Name, spec)
+	dockerContainer, err := x.system.Docker.Start(x.logger, x.Name, spec)
 	if err != nil {
 		x.logger.WithError(err).Warn("Can't start container, will try again later")
 		uuid := x.scheduleTry()
 		return &TryAgain{id: uuid, Spec: spec}
 	}
-	go x.startHealthchecks(container)
+	container := containerInit(x, dockerContainer)
 	return &Wait{Container: container}
 }
 
-func (x *Instance) startOrTryAgainNext(current *docker.Container, spec *spec.Spec) Snapshot {
-	container, err := x.system.Docker.Start(x.logger, x.Name, spec)
+func (x *Instance) startOrTryAgainNext(current *Container, spec *spec.Spec) Snapshot {
+	dockerContainer, err := x.system.Docker.Start(x.logger, x.Name, spec)
 	if err != nil {
 		x.logger.WithError(err).Warn("Can't start container, will try again later")
 		uuid := x.scheduleTry()
 		return &TryAgainNext{Current: current, id: uuid, Spec: spec}
 	}
-	go x.startHealthchecks(container)
+
+	container := containerInit(x, dockerContainer)
+
 	return &WaitNext{Current: current, Next: container}
 }
 
@@ -158,12 +138,6 @@ func (s *Wait) apply(instance *Instance, e event) Snapshot {
 	case eventHealthy:
 		if e.containerId == s.Container.Id {
 			return &Stable{Container: s.Container}
-		}
-		return s
-	case eventUnhealthy:
-		if e.containerId == s.Container.Id {
-			instance.logger.Warn("Deployed container is in unhealthy state")
-			return s
 		}
 		return s
 	case eventStop:
@@ -224,14 +198,6 @@ func (s *WaitNext) apply(instance *Instance, e event) Snapshot {
 		if e.containerId == s.Next.Id {
 			instance.scheduleDeployCompleted(time.Duration(s.Current.Spec.AfterTimeout()) * time.Second)
 			return &BothStarted{Prev: s.Current, Next: s.Next}
-		}
-		return s
-	case eventUnhealthy:
-		if e.containerId == s.Next.Id {
-			instance.logger.Warn("Next container is unhealthy, will stop it and try to start later again")
-			s.Next.Stop()
-			uuid := instance.scheduleTry()
-			return &TryAgainNext{Current: s.Current, id: uuid, Spec: s.Next.Spec}
 		}
 		return s
 	case eventStop:

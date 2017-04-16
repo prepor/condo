@@ -115,9 +115,6 @@ func TestComplex2(t *testing.T) {
 	make(`{:spec {:Image "prepor/condo-test:bad"}
            :deploy [:After 2]}`)
 	require.IsType(t, new(WaitNext), <-snapshots)
-	require.IsType(t, new(TryAgainNext), <-snapshots)
-	require.IsType(t, new(WaitNext), <-snapshots)
-	require.IsType(t, new(TryAgainNext), <-snapshots)
 
 	go instance.Stop()
 

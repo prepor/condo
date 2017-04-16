@@ -59,13 +59,3 @@ func (n eventHealthy) event() {}
 func (n eventHealthy) String() string {
 	return "Healthy"
 }
-
-type eventUnhealthy struct {
-	containerId string
-}
-
-func (n eventUnhealthy) event() {}
-
-func (n eventUnhealthy) String() string {
-	return "Unhealthy"
-}

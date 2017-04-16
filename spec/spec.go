@@ -52,10 +52,9 @@ func (s *DeployStrategy) UnmarshalEDN(bs []byte) error {
 }
 
 type Spec struct {
-	Deploy        DeployStrategy
-	Spec          interface{}
-	HealthTimeout int64 `edn:"health-timeout"`
-	StopTimeout   int64 `edn:"stop-timeout"`
+	Deploy      DeployStrategy
+	Spec        interface{}
+	StopTimeout int64 `edn:"stop-timeout"`
 }
 
 type After struct {
@@ -70,7 +69,6 @@ func Parse(v []byte) (*Spec, error) {
 	var s Spec
 	s.Deploy = DeployStrategy{Strategy: Before{}}
 	s.StopTimeout = 10
-	s.HealthTimeout = 10
 	if err := edn.Unmarshal(v, &s); err != nil {
 		return nil, err
 	}
