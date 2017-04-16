@@ -22,6 +22,11 @@ func containerInit(instance *Instance, container *docker.Container) *Container {
 	}
 	c.instance.group.Add(1)
 	go c.waitHealthchecks()
+	if container.Spec.WatchImage {
+		c.instance.group.Add(1)
+		go c.watchImage()
+
+	}
 	return c
 }
 
@@ -63,6 +68,39 @@ Loop:
 				return
 			}
 
+		}
+
+	}
+}
+
+func (x *Container) watchImage() {
+	defer x.instance.group.Done()
+
+Loop:
+	for {
+		select {
+		case <-x.done:
+			break Loop
+		case <-time.After(5 * time.Second):
+			if err := x.instance.system.Docker.ImagePull2(x.Spec.Image()); err != nil {
+				x.instance.logger.WithError(err).Warn("Error while image pulling")
+				continue Loop
+			}
+
+			res, _, err := x.instance.system.Docker.ImageInspectWithRaw(context.Background(), x.Spec.Image())
+			if err != nil {
+				x.instance.logger.WithError(err).Warn("Error while container inspecting")
+				continue Loop
+			}
+
+			if res.ID != x.Image {
+				x.instance.logger.
+					WithField("was", x.Image).
+					WithField("now", res.ID).
+					Info("New image version available")
+				x.instance.events <- eventNewSpec{x.Spec}
+				return
+			}
 		}
 
 	}

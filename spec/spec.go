@@ -55,6 +55,7 @@ type Spec struct {
 	Deploy      DeployStrategy
 	Spec        interface{}
 	StopTimeout int64 `edn:"stop-timeout"`
+	WatchImage  bool  `edn:"watch-image"`
 }
 
 type After struct {

@@ -25,6 +25,7 @@ type Container struct {
 	Spec      *spec.Spec
 	StartedAt *time.Time
 	StableAt  *time.Time
+	Image     string
 	logger    *logrus.Entry
 	docker    *Docker
 }
@@ -68,6 +69,23 @@ func (d Docker) getCredentials(image string) (res string) {
 	return
 }
 
+func (d *Docker) ImagePull2(image string) error {
+	credentials := d.getCredentials(image)
+
+	r, err := d.ImagePull(context.Background(), image,
+		dockerTypes.ImagePullOptions{
+			RegistryAuth: credentials,
+		})
+	if err != nil {
+		return err
+	}
+
+	if _, err = io.Copy(ioutil.Discard, r); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (d *Docker) Start(l *logrus.Entry, name string, spec *spec.Spec) (container *Container, err error) {
 	l.Info("Start container")
 	config, hostConfig, networkingConfig, err := spec.ContainerConfigs()
@@ -77,24 +95,12 @@ func (d *Docker) Start(l *logrus.Entry, name string, spec *spec.Spec) (container
 	}
 
 	ctx := context.Background()
-
-	credentials := d.getCredentials(config.Image)
 	l.WithField("image", config.Image).
-		WithField("credentials", credentials).
+		WithField("credentials", d.getCredentials(config.Image)).
 		Info("Image pull")
-	r, err := d.ImagePull(ctx, config.Image,
-		dockerTypes.ImagePullOptions{
-			RegistryAuth: credentials,
-		})
-	if err != nil {
-		return
-	}
+
 	l.WithField("image", config.Image).Info("Image pulled")
-
-	if _, err = io.Copy(ioutil.Discard, r); err != nil {
-		return
-	}
-
+	d.ImagePull2(config.Image)
 	name = fmt.Sprintf("%s_%s", name, util.RandStringBytes(10))
 
 	d.ContainerRemove(ctx, name, dockerTypes.ContainerRemoveOptions{Force: true})
@@ -116,11 +122,20 @@ func (d *Docker) Start(l *logrus.Entry, name string, spec *spec.Spec) (container
 
 	l.Info("Container started")
 
+	info, err := d.ContainerInspect(context.Background(), createdRes.ID)
+	if err != nil {
+		l.WithError(err).Warn("Error while container inspecting")
+		timeout := time.Duration(spec.StopTimeout) * time.Second
+		d.ContainerStop(context.Background(), createdRes.ID, &timeout)
+		return
+	}
+
 	started := time.Now()
 	container = &Container{
 		Id:        createdRes.ID,
 		Spec:      spec,
 		StartedAt: &started,
+		Image:     info.Image,
 		logger:    l,
 		docker:    d,
 	}
