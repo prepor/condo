@@ -7,6 +7,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/prepor/condo/spec"
 	"github.com/prepor/condo/system"
+	uuid "github.com/satori/go.uuid"
 )
 
 type Instance struct {
@@ -108,6 +109,10 @@ func (x *Instance) Stop() {
 	x.events <- eventStop{}
 	close(x.done)
 	<-x.eventsLoopDone
+}
+
+func (x *Instance) Deployed(id uuid.UUID) {
+	x.events <- eventDeployCompleted{id}
 }
 
 func (x *Instance) Subsribe(k interface{}) <-chan Snapshot {
