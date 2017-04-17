@@ -61,13 +61,9 @@ func New(system *system.System, supervisor *supervisor.Supervisor, exposer Expos
 	return self
 }
 
-type watcherKeyType string
-
-var watcherKey = watcherKeyType("exposer-watcher")
-
 func (x *Self) instanceWatcher(i *instance.Instance) {
 	defer x.watchers.Done()
-	snapshots := i.Subsribe(watcherKey)
+	snapshots := i.Subsribe(subscriptionKey)
 	for {
 		s, ok := <-snapshots
 		if !ok {
