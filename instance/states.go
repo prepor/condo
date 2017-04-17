@@ -196,8 +196,8 @@ func (s *WaitNext) apply(instance *Instance, e event) Snapshot {
 		return instance.startOrTryAgainNext(s.Current, e.spec)
 	case eventHealthy:
 		if e.containerId == s.Next.Id {
-			instance.scheduleDeployCompleted(time.Duration(s.Current.Spec.AfterTimeout()) * time.Second)
-			return &BothStarted{Prev: s.Current, Next: s.Next}
+			id := instance.scheduleDeployCompleted(time.Duration(s.Current.Spec.AfterTimeout()) * time.Second)
+			return &BothStarted{Prev: s.Current, Next: s.Next, Id: id}
 		}
 		return s
 	case eventStop:
