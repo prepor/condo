@@ -48,7 +48,7 @@ type TryAgainNext struct {
 type BothStarted struct {
 	Prev *Container
 	Next *Container
-	id   uuid.UUID
+	Id   uuid.UUID `json:"-"`
 }
 
 func (x *Instance) scheduleTry() uuid.UUID {
@@ -234,8 +234,11 @@ func (s *BothStarted) apply(instance *Instance, e event) Snapshot {
 		s.Prev.Stop()
 		return instance.startOrTryAgainNext(s.Next, e.spec)
 	case eventDeployCompleted:
-		s.Prev.Stop()
-		return &Stable{Container: s.Next}
+		if e.id == s.Id {
+			s.Prev.Stop()
+			return &Stable{Container: s.Next}
+		}
+		return s
 	case eventStop:
 		s.Prev.Stop()
 		s.Next.Stop()
