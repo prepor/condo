@@ -21,8 +21,18 @@ type Init struct {
 type Stopped struct {
 }
 
+func (x *Instance) transitStopped() *Stopped {
+	x.ensureStoppedProxy()
+	return &Stopped{}
+}
+
 type Wait struct {
 	Container *Container
+}
+
+func (x *Instance) transitWait(container *Container) *Wait {
+	x.ensureStoppedProxy()
+	return &Wait{Container: container}
 }
 
 type TryAgain struct {
@@ -30,13 +40,26 @@ type TryAgain struct {
 	Spec *spec.Spec
 }
 
+func (x *Instance) transitTryAgain(id uuid.UUID, spec *spec.Spec) *TryAgain {
+	x.ensureStoppedProxy()
+	return &TryAgain{id: id, Spec: spec}
+}
+
 type Stable struct {
 	Container *Container
+}
+
+func (x *Instance) transitStable(container *Container) *Stable {
+	return &Stable{Container: container}
 }
 
 type WaitNext struct {
 	Current *Container
 	Next    *Container
+}
+
+func (x *Instance) transitWaitNext(current, next *Container) *WaitNext {
+	return &WaitNext{Current: current, Next: next}
 }
 
 type TryAgainNext struct {
@@ -45,10 +68,19 @@ type TryAgainNext struct {
 	Spec    *spec.Spec
 }
 
+func (x *Instance) transitTryAgainNext(current *Container, id uuid.UUID, spec *spec.Spec) *TryAgainNext {
+	return &TryAgainNext{Current: current, id: id, Spec: spec}
+}
+
 type BothStarted struct {
 	Prev *Container
 	Next *Container
-	Id   uuid.UUID `json:"-"`
+	id   uuid.UUID
+}
+
+func (x *Instance) transitBothStarted(prev, next *Container) *BothStarted {
+	id := x.scheduleDeployCompleted(time.Duration(prev.Spec.AfterTimeout()) * time.Second)
+	return &BothStarted{Prev: prev, Next: next, id: id}
 }
 
 func (x *Instance) scheduleTry() uuid.UUID {
@@ -96,10 +128,10 @@ func (x *Instance) startOrTryAgain(spec *spec.Spec) Snapshot {
 	if err != nil {
 		x.logger.WithError(err).Warn("Can't start container, will try again later")
 		uuid := x.scheduleTry()
-		return &TryAgain{id: uuid, Spec: spec}
+		return x.transitTryAgain(uuid, spec)
 	}
 	container := containerInit(x, dockerContainer)
-	return &Wait{Container: container}
+	return x.transitWait(container)
 }
 
 func (x *Instance) startOrTryAgainNext(current *Container, spec *spec.Spec) Snapshot {
@@ -107,12 +139,11 @@ func (x *Instance) startOrTryAgainNext(current *Container, spec *spec.Spec) Snap
 	if err != nil {
 		x.logger.WithError(err).Warn("Can't start container, will try again later")
 		uuid := x.scheduleTry()
-		return &TryAgainNext{Current: current, id: uuid, Spec: spec}
+		return x.transitTryAgainNext(current, uuid, spec)
 	}
 
 	container := containerInit(x, dockerContainer)
-
-	return &WaitNext{Current: current, Next: container}
+	return x.transitWaitNext(current, container)
 }
 
 func (s *Init) apply(instance *Instance, e event) Snapshot {
@@ -123,7 +154,7 @@ func (s *Init) apply(instance *Instance, e event) Snapshot {
 	case eventNewSpec:
 		return instance.startOrTryAgain(e.spec)
 	case eventStop:
-		return &Stopped{}
+		return instance.transitStopped()
 	}
 }
 
@@ -137,12 +168,19 @@ func (s *Wait) apply(instance *Instance, e event) Snapshot {
 		return instance.startOrTryAgain(e.spec)
 	case eventHealthy:
 		if e.containerId == s.Container.Id {
-			return &Stable{Container: s.Container}
+			err := instance.ensureProxy(s.Container)
+			if err != nil {
+				instance.logger.WithError(err).Error("Can't transit to stable")
+				s.Container.Stop()
+				uuid := instance.scheduleTry()
+				return instance.transitTryAgain(uuid, s.Container.Spec)
+			}
+			return instance.transitStable(s.Container)
 		}
 		return s
 	case eventStop:
 		s.Container.Stop()
-		return &Stopped{}
+		return instance.transitStopped()
 	}
 }
 
@@ -159,7 +197,7 @@ func (s *TryAgain) apply(instance *Instance, e event) Snapshot {
 		}
 		return s
 	case eventStop:
-		return &Stopped{}
+		return instance.transitStopped()
 	}
 }
 
@@ -176,7 +214,7 @@ func (s *Stable) apply(instance *Instance, e event) Snapshot {
 		return instance.startOrTryAgainNext(s.Container, e.spec)
 	case eventStop:
 		s.Container.Stop()
-		return &Stopped{}
+		return instance.transitStopped()
 	}
 }
 
@@ -196,14 +234,21 @@ func (s *WaitNext) apply(instance *Instance, e event) Snapshot {
 		return instance.startOrTryAgainNext(s.Current, e.spec)
 	case eventHealthy:
 		if e.containerId == s.Next.Id {
-			id := instance.scheduleDeployCompleted(time.Duration(s.Current.Spec.AfterTimeout()) * time.Second)
-			return &BothStarted{Prev: s.Current, Next: s.Next, Id: id}
+			err := instance.ensureProxy(s.Next)
+			if err != nil {
+				instance.logger.WithError(err).Error("Can't transit to both started")
+				s.Next.Stop()
+				uuid := instance.scheduleTry()
+				return instance.transitTryAgainNext(s.Current, uuid, s.Next.Spec)
+			}
+
+			return instance.transitBothStarted(s.Current, s.Next)
 		}
 		return s
 	case eventStop:
 		s.Current.Stop()
 		s.Next.Stop()
-		return &Stopped{}
+		return instance.transitStopped()
 	}
 }
 
@@ -221,7 +266,7 @@ func (s *TryAgainNext) apply(instance *Instance, e event) Snapshot {
 		return s
 	case eventStop:
 		s.Current.Stop()
-		return &Stopped{}
+		return instance.transitStopped()
 	}
 }
 
@@ -234,15 +279,15 @@ func (s *BothStarted) apply(instance *Instance, e event) Snapshot {
 		s.Prev.Stop()
 		return instance.startOrTryAgainNext(s.Next, e.spec)
 	case eventDeployCompleted:
-		if e.id == s.Id {
+		if e.id == s.id {
 			s.Prev.Stop()
-			return &Stable{Container: s.Next}
+			return instance.transitStable(s.Next)
 		}
 		return s
 	case eventStop:
 		s.Prev.Stop()
 		s.Next.Stop()
-		return &Stopped{}
+		return instance.transitStopped()
 	}
 }
 

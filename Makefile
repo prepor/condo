@@ -36,15 +36,16 @@ GOTAGS ?=
 # Number of procs to use
 GOMAXPROCS ?= 4
 
-# bin builds the project by invoking the compile script inside of a Docker
-# container. Invokers can override the target OS or architecture using
-# environment variables.
-bin:
+web:
 	@echo "==> Compile ClojureScript for ${PROJECT}..."
 	@$(MAKE) -C ui prod
 	@echo "==> Generate ${PROJECT}..."
 	@go generate
 
+# bin builds the project by invoking the compile script inside of a Docker
+# container. Invokers can override the target OS or architecture using
+# environment variables.
+bin:
 	@echo "==> Building ${PROJECT}..."
 	@docker run \
 		--interactive \

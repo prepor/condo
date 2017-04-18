@@ -5,9 +5,9 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	log "github.com/Sirupsen/logrus"
+	"github.com/prepor/condo/proxy"
 	"github.com/prepor/condo/spec"
 	"github.com/prepor/condo/system"
-	uuid "github.com/satori/go.uuid"
 )
 
 type Instance struct {
@@ -21,6 +21,7 @@ type Instance struct {
 	group            *sync.WaitGroup
 	subscribers      map[interface{}]chan<- Snapshot
 	subscribersMutex sync.Mutex
+	proxy            *proxy.InstanceProxy
 }
 
 func New(system *system.System, name string) *Instance {
@@ -111,10 +112,6 @@ func (x *Instance) Stop() {
 	<-x.eventsLoopDone
 }
 
-func (x *Instance) Deployed(id uuid.UUID) {
-	x.events <- eventDeployCompleted{id}
-}
-
 func (x *Instance) Subsribe(k interface{}) <-chan Snapshot {
 	x.subscribersMutex.Lock()
 	defer x.subscribersMutex.Unlock()
@@ -129,4 +126,28 @@ func (x *Instance) Unsubscribe(k interface{}) {
 	defer x.subscribersMutex.Unlock()
 
 	delete(x.subscribers, k)
+}
+
+func (x *Instance) ensureProxy(container *Container) error {
+	if x.proxy == nil {
+		p, err := x.system.Proxy.NewInstanceProxy(x.logger, container.Container)
+		if err != nil {
+			return err
+		}
+		x.proxy = p
+	} else {
+		err := x.proxy.SetBackend(container.Container)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (x *Instance) ensureStoppedProxy() {
+	if x.proxy != nil {
+		x.proxy.Stop()
+		x.proxy = nil
+	}
 }

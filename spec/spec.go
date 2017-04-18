@@ -51,11 +51,18 @@ func (s *DeployStrategy) UnmarshalEDN(bs []byte) error {
 	return deployStrategyError()
 }
 
+type ProxyConfig struct {
+	Listen             string `edn:"listen"`
+	DestinationPort    int    `edn:"destination-port"`
+	DestinationNetwork string `edn:"destination-network"`
+}
+
 type Spec struct {
 	Deploy      DeployStrategy
 	Spec        interface{}
-	StopTimeout int64 `edn:"stop-timeout"`
-	WatchImage  bool  `edn:"watch-image"`
+	StopTimeout int64        `edn:"stop-timeout"`
+	WatchImage  bool         `edn:"watch-image"`
+	Proxy       *ProxyConfig `edn:"proxy"`
 }
 
 type After struct {

@@ -13,6 +13,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	log "github.com/Sirupsen/logrus"
 	"github.com/prepor/condo/docker"
+	"github.com/prepor/condo/proxy"
 	"github.com/prepor/condo/spec"
 	"github.com/prepor/condo/util"
 )
@@ -27,6 +28,7 @@ type System struct {
 	Specs      Specer
 	Components *sync.WaitGroup
 	Done       <-chan struct{}
+	Proxy      *proxy.Proxy
 	done       chan struct{}
 	systemName string
 }
@@ -35,6 +37,7 @@ func New(docker *docker.Docker, specs Specer) *System {
 	done := make(chan struct{})
 	return &System{
 		Docker:     docker,
+		Proxy:      proxy.New(),
 		Specs:      specs,
 		Components: &sync.WaitGroup{},
 		Done:       done,

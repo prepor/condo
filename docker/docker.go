@@ -26,6 +26,7 @@ type Container struct {
 	StartedAt *time.Time
 	StableAt  *time.Time
 	Image     string
+	Network   *dockerTypes.NetworkSettings
 	logger    *logrus.Entry
 	docker    *Docker
 }
@@ -136,6 +137,7 @@ func (d *Docker) Start(l *logrus.Entry, name string, spec *spec.Spec) (container
 		Spec:      spec,
 		StartedAt: &started,
 		Image:     info.Image,
+		Network:   info.NetworkSettings,
 		logger:    l,
 		docker:    d,
 	}
