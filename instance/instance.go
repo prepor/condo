@@ -129,13 +129,18 @@ func (x *Instance) Unsubscribe(k interface{}) {
 }
 
 func (x *Instance) ensureProxy(container *Container) error {
-	if x.proxy == nil {
+	if x.proxy == nil && container.Container.Spec.Proxy != nil {
 		p, err := x.system.Proxy.NewInstanceProxy(x.logger, container.Container)
 		if err != nil {
 			return err
 		}
 		x.proxy = p
 	} else {
+		if container.Container.Spec.Proxy == nil {
+			x.proxy.Stop()
+			x.proxy = nil
+			return nil
+		}
 		err := x.proxy.SetBackend(container.Container)
 		if err != nil {
 			return err
