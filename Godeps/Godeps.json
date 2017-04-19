@@ -22,6 +22,10 @@
 			"Rev": "10f801ebc38b33738c9d17d50860f484a0988ff5"
 		},
 		{
+			"ImportPath": "github.com/armon/go-metrics",
+			"Rev": "93f237eba9b0602f3e73710416558854a81d9337"
+		},
+		{
 			"ImportPath": "github.com/davecgh/go-spew/spew",
 			"Comment": "v1.1.0",
 			"Rev": "346938d642f2ec3594ed81d874461961cd0faa76"
@@ -180,12 +184,33 @@
 			"Rev": "2d7ec3137cd111b821c5dd72eab334a252857011"
 		},
 		{
+			"ImportPath": "github.com/hashicorp/errwrap",
+			"Rev": "7554cd9344cec97297fa6649b055a8c98c2a1e55"
+		},
+		{
 			"ImportPath": "github.com/hashicorp/go-cleanhttp",
 			"Rev": "3573b8b52aa7b37b9358d966a898feb387f62437"
 		},
 		{
+			"ImportPath": "github.com/hashicorp/go-msgpack/codec",
+			"Rev": "fa3f63826f7c23912c15263591e65d54d080b458"
+		},
+		{
+			"ImportPath": "github.com/hashicorp/go-multierror",
+			"Rev": "ed905158d87462226a13fe39ddf685ea65f1c11f"
+		},
+		{
 			"ImportPath": "github.com/hashicorp/go-rootcerts",
 			"Rev": "6bb64b370b90e7ef1fa532be9e591a81c3493e00"
+		},
+		{
+			"ImportPath": "github.com/hashicorp/go-sockaddr",
+			"Rev": "acd314c5781ea706c710d9ea70069fd2e110d61d"
+		},
+		{
+			"ImportPath": "github.com/hashicorp/memberlist",
+			"Comment": "v0.1.0-2-g6795838",
+			"Rev": "679583836ce521ac7a4cd6e6806bab9dba8fbdb8"
 		},
 		{
 			"ImportPath": "github.com/hashicorp/serf/coordinate",
@@ -219,6 +244,10 @@
 		{
 			"ImportPath": "github.com/meatballhat/negroni-logrus",
 			"Rev": "7c570a907cfc69cdc004ad506c6f5e234815b936"
+		},
+		{
+			"ImportPath": "github.com/miekg/dns",
+			"Rev": "6ebcb714d36901126ee2807031543b38c56de963"
 		},
 		{
 			"ImportPath": "github.com/mitchellh/go-homedir",
@@ -255,6 +284,10 @@
 			"ImportPath": "github.com/satori/go.uuid",
 			"Comment": "v1.1.0-8-g5bf94b6",
 			"Rev": "5bf94b69c6b68ee1b541973bb8e1144db23a194b"
+		},
+		{
+			"ImportPath": "github.com/sean-/seed",
+			"Rev": "e2103e2c35297fb7e17febb81e49b312087a2372"
 		},
 		{
 			"ImportPath": "github.com/stretchr/testify/assert",
