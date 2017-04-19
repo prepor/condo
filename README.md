@@ -51,7 +51,7 @@ That's basically the core functionality of condo ;)
 Condo watches for `*.edn` files in all directories defined as PREFIXes via command line interface.
 
 It has only one required parameter: `:spec`. It contains Docker container description in the format of [Docker's remote API](https://docs.docker.com/engine/reference/api/docker_remote_api_v1.24/#create-a-container).
-The only required field inside this description is `:Image`. See [example](https://github.com/prepor/condo/tree/master/specs/full.edn)
+The only required field inside this description is `:Image`. See [example](specs/full.edn) of specification.
 
 Optional parameters:
 * `:deploy` (default `[:Before]`). Can be `[:Before]` or `[:After n]` where `n` is the number of seconds before stopping the previous container after the successful start of the new one.
