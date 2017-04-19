@@ -46,6 +46,28 @@ Yep, now it's deployed, the previous container was stopped.
 
 That's basically the core functionality of condo ;)
 
+## Configuration
+
+`condo start` command has number of arguments which can be inspected via `condo start --help` (`docker run prepor/condo:0.11.dev --help`). Docker connection can be configured via standard environment variables:
+
+* `DOCKER_HOST` to set the url to the docker server.
+* `DOCKER_API_VERSION` to set the version of the API to reach, leave empty for latest.
+* `DOCKER_CERT_PATH` to load the TLS certificates from.
+* `DOCKER_TLS_VERIFY` to enable or disable TLS verification, off by default.
+
+If you going to use Consul as state storage it can be configured via environment variables:
+
+* `CONSUL_HTTP_ADDR`
+* `CONSUL_HTTP_TOKEN`
+* `CONSUL_HTTP_AUTH` the HTTP authentication header
+* `CONSUL_HTTP_SSL` whether or not to use HTTPS.
+* `CONSUL_CACERT` the CA file to use for talking to Consul over TLS.
+* `CONSUL_CAPATH` the path to a directory of CA certs to use for talking to Consul over TLS.
+* `CONSUL_CLIENT_CERT` the client cert file to use for talking to Consul over TLS
+* `CONSUL_CLIENT_KEY` the client key file to use for talking to Consul over TLS.
+* `CONSUL_TLS_SERVER_NAME` the server name to use as the SNI host when connecting via TLS
+* `CONSUL_HTTP_SSL_VERIFY` whether or not to disable certificate checking.
+
 ## Specification format
 
 Condo watches for `*.edn` files in all directories defined as PREFIXes via command line interface.

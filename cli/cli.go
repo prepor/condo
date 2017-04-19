@@ -107,7 +107,7 @@ func Go() {
 		apiAdvAddr := cmd.StringOpt("api-adv-addr", "", "Address of HTTP API to advertise to other cluster members")
 		apiAdvPort := cmd.IntOpt("api-adv-port", 4765, "Address of HTTP API to advertise to other cluster members")
 
-		cmd.Spec = "--directory=<path> [--listen=<addr>]" +
+		cmd.Spec = "--directory=<path> [--listen=<addr>] " +
 			"[--expose-consul=<prefix> | " +
 			"[--expose-gossip --gossip-connect=<addr> [--gossip-bind-addr=<addr>] [--gossip-bind-port=<port>] [--gossip-adv-addr=<addr>] [--gossip-adv-port=<port>] [--api-adv-addr=<addr>] [--api-adv-port=<port>]]" +
 			"]" +
