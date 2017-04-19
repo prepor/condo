@@ -17,6 +17,7 @@ import (
 	"github.com/prepor/condo/consul"
 	"github.com/prepor/condo/docker"
 	"github.com/prepor/condo/expose"
+	"github.com/prepor/condo/gossip"
 	"github.com/prepor/condo/spec"
 	"github.com/prepor/condo/supervisor"
 	"github.com/prepor/condo/system"
@@ -94,7 +95,23 @@ func Go() {
 		systemName := cmd.StringOpt("instance-name", "", "Id of this instance. Can be used in exposing")
 
 		consulPrefix := cmd.StringOpt("expose-consul", "", "Expose state to consul with provided prefix")
-		cmd.Spec = "--directory=<path> [--listen=<addr>] [--expose-consul=<prefix>] [--instance-name=<name>]"
+
+		gossipEnable := cmd.BoolOpt("expose-gossip", false, "Annonce itself via gossip protocol")
+		gossipConnects := cmd.StringsOpt("gossip-connect", []string{}, "Initial address for gossip membership")
+		gossipBindAddr := cmd.StringOpt("gossip-bind-addr", "0.0.0.0", "Address to bind to")
+		gossipBindPort := cmd.IntOpt("gossip-bind-port", 7946, "Port to bind to")
+
+		gossipAdvAddr := cmd.StringOpt("gossip-adv-addr", "", "Address to advertise to other cluster members")
+		gossipAdvPort := cmd.IntOpt("gossip-adv-port", 7946, "Port to advertise to other cluster members")
+
+		apiAdvAddr := cmd.StringOpt("api-adv-addr", "", "Address of HTTP API to advertise to other cluster members")
+		apiAdvPort := cmd.IntOpt("api-adv-port", 4765, "Address of HTTP API to advertise to other cluster members")
+
+		cmd.Spec = "--directory=<path> [--listen=<addr>]" +
+			"[--expose-consul=<prefix> | " +
+			"[--expose-gossip --gossip-connect=<addr> [--gossip-bind-addr=<addr>] [--gossip-bind-port=<port>] [--gossip-adv-addr=<addr>] [--gossip-adv-port=<port>] [--api-adv-addr=<addr>] [--api-adv-port=<port>]]" +
+			"]" +
+			"[--instance-name=<name>]"
 		cmd.Action = func() {
 			sigs := make(chan os.Signal, 1)
 			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -120,12 +137,34 @@ func Go() {
 				httpApi = api.New(system, sup, *listen)
 			}
 
+			var exposer expose.Exposer
+
 			if *consulPrefix != "" {
-				exposer := consul.New(*consulPrefix)
+				exposer = consul.New(*consulPrefix)
+			}
+
+			if *gossipEnable {
+				if *listen == "" {
+					log.Fatal("Can't be part of gossip cluster without enabled HTTP API")
+				}
+				exposer = gossip.New(&gossip.Config{
+					Condo:         system.Name(),
+					Connects:      *gossipConnects,
+					BindAddr:      *gossipBindAddr,
+					BindPort:      *gossipBindPort,
+					AdvertiseAddr: *gossipAdvAddr,
+					AdvertisePort: *gossipAdvPort,
+					ApiAddr:       *apiAdvAddr,
+					ApiPort:       *apiAdvPort,
+				})
+			}
+
+			if exposer != nil {
 				expose.New(system, sup, exposer)
 				if httpApi != nil {
 					httpApi.SetExposer(exposer)
 				}
+
 			}
 			sup.Start()
 

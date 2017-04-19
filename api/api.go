@@ -86,8 +86,11 @@ func (x *API) globalStateStreamHandler(w http.ResponseWriter, r *http.Request) {
 	done := make(chan struct{})
 	states := x.exposer.ReceiveStates(done)
 	go func() {
-		if _, _, err := conn.NextReader(); err != nil {
-			close(done)
+		for {
+			if _, _, err := conn.NextReader(); err != nil {
+				close(done)
+				return
+			}
 		}
 	}()
 	for {
