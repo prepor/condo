@@ -8,9 +8,14 @@ Condo is a simple idempotent supervisor for Docker containers. It can be used as
 
 * Watches directories and starts a Docker container for each specification inside them.
 * Reacts to any changes in these directories and specifications therein (adding, removing and updating of specifications).
-* Zero downtime deployments with `:After` option enabled. It starts a new container *in parallel* with the old one, and stops the old one only after the new one is successfully started (including health checks).
+* Zero downtime deployments with `:After` option enabled. It starts a new container *in parallel* with the old one, and stops the old one only after the new one is successfully started (including health checks). It also contains embedded TCP proxy to have one static port in front of such containers.
 * Supports the health check feature of Docker (from `1.12`). It considers a container `Stable` only when the health checks are passed.
+* Exposes its state into an external storage (e.g. Consul). It can be used for monitoring of the entire system, higher level orchestration, etc.
+* Provides http-endpoint to track the deployment status of a service (/v1/wait_for) locally or across cluster.
+* Nice UI for exploring the state of current daemon and the entire system (if state exposing is enabled). It can use gossip protocol to inspect state of all condos without any external dependencies.
 * Container specification is fully opaque for condo, it has the same format as [Docker's remote API](https://docs.docker.com/engine/reference/api/docker_remote_api_v1.24/#create-a-container), so there is no additional point of indirection and you can use all of Docker's features (even unreleased).
+
+The main task of Condo is keep your system in sync with list of service specifications. Simple.
 
 ## Quickstart
 
@@ -46,14 +51,14 @@ That's basically the core functionality of condo ;)
 Condo watches for `*.edn` files in all directories defined as PREFIXes via command line interface.
 
 It has only one required parameter: `:spec`. It contains Docker container description in the format of [Docker's remote API](https://docs.docker.com/engine/reference/api/docker_remote_api_v1.24/#create-a-container).
-The only required field inside this description is `:Image`.
-
-`:spec` is extended by the `:Name` parameter (name of the container).
+The only required field inside this description is `:Image`. See [example](https://github.com/prepor/condo/tree/master/specs/full.edn)
 
 Optional parameters:
 * `:deploy` (default `[:Before]`). Can be `[:Before]` or `[:After n]` where `n` is the number of seconds before stopping the previous container after the successful start of the new one.
-* `:health-timeout` in seconds (default 10). It describes how long condo will wait for the health checks to pass.
 * `:stop-timeout` in seconds (default 10). It will be passed into `stop` Docker operation. It describes how long it will wait before force-stopping the container.
+* `:name` name of container. By default containers have names consist of name of spec file + some random suffix. In can't be used with :After deploy strategy.
+* `:proxy` start TCP proxy in front of containers. Expects condo is run in the same docker network as containers. Usable only with :After deploy strategy.
+* `:watch-image` condo will periodically pull image and in the case of update it redeploy container.
   
 ## Real world setups
 

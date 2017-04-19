@@ -1,0 +1,34 @@
+{:spec {:Image "nginx:1.11.13-alpine"
+        ;; here you can use exactly the same format as in Docker Remote
+        ;; API (https://docs.docker.com/engine/api/).
+        ;; They will be passed to Docker as is, so Condo doesn't limit you in
+        ;; any Docker's features.
+        :Env ["FOO=bar"]
+        :HostConfig {:PortBindings {"80/tcp" [{:HostPort "9000"}]}
+                     ;; condo itself doesn't restart services, but we can
+                     ;; configure docker for this
+                     :RestartPolicy {:Name "on-failure"}
+                     :Binds ["/var/run/docker.sock:/tmp/docker.sock"
+                             "/tmp/certs:/etc/nginx/certs"]}}
+ ;; It will start TCP proxy in front of container. It's usable with :After
+ ;; deploy strategy (see below)
+ ;; :proxy {:listen ":8080"
+ ;;         :destination-port 80
+ ;;         ;; the name of network. by default it uses the first one
+ ;;         :destination-network "my-network"}
+
+ ;; the name of container
+ :name "nginx"
+
+ ;; number of seconds. This is value of time parameter of Docker's stop
+ ;; command (see https://docs.docker.com/engine/reference/commandline/stop/#description)
+ :stop-timeout 5
+
+ ;; periodically pull image and in the case of update it redeploy container.
+ ;; false by default
+ :watch-image true
+
+ ;; it will stop container before new deploy. [:After 10] will start new
+ ;; container in parallel and stop it in the case of success (Healthchecks
+ ;; passed) after 10 seconds
+ :deploy [:Before]}

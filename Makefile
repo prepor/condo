@@ -5,7 +5,7 @@ CURRENT_DIR := $(CURRENT_DIR:/=)
 
 # Get the project metadata
 GOVERSION := 1.8
-VERSION := 0.11.dev
+VERSION := 0.11.rc1
 PROJECT := github.com/prepor/condo
 OWNER := $(dir $(PROJECT))
 OWNER := $(notdir $(OWNER:/=))
