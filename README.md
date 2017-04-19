@@ -172,7 +172,7 @@ You will need go and godep
 
 Release build
 
-    make bin docker release
+    make web bin docker release
     
 ## Credits
 
