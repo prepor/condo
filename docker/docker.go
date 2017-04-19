@@ -102,11 +102,18 @@ func (d *Docker) Start(l *logrus.Entry, name string, spec *spec.Spec) (container
 
 	l.WithField("image", config.Image).Info("Image pulled")
 	d.ImagePull2(config.Image)
-	name = fmt.Sprintf("%s_%s", name, util.RandStringBytes(10))
 
-	d.ContainerRemove(ctx, name, dockerTypes.ContainerRemoveOptions{Force: true})
+	var containerName string
 
-	createdRes, err := d.ContainerCreate(ctx, config, hostConfig, networkingConfig, name)
+	if spec.Name != "" {
+		containerName = spec.Name
+	} else {
+		containerName = fmt.Sprintf("%s_%s", name, util.RandStringBytes(10))
+	}
+
+	d.ContainerRemove(ctx, containerName, dockerTypes.ContainerRemoveOptions{Force: true})
+
+	createdRes, err := d.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
 	if err != nil {
 		return
 	}

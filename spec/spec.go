@@ -63,6 +63,7 @@ type Spec struct {
 	StopTimeout int64        `edn:"stop-timeout"`
 	WatchImage  bool         `edn:"watch-image"`
 	Proxy       *ProxyConfig `edn:"proxy"`
+	Name        string       `edn:"name"`
 }
 
 type After struct {
